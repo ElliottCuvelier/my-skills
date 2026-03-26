@@ -41,6 +41,8 @@ All transaction types extend a common base:
 ```typescript
 import { nanoid } from 'nanoid';
 
+// NOTE: const enum requires isolatedModules: false. If your bundler (Vite/esbuild/SWC)
+// mandates isolatedModules: true, replace with a regular enum or an as const object.
 const enum TransactionType {
   CREATE = 'CREATE',
   UPDATE = 'UPDATE',

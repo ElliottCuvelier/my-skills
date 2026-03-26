@@ -9,15 +9,16 @@ Hybrid local-first architecture combining TinyBase (storage + CRDT sync), MobX (
 
 ## Compatibility
 
-| Dependency      | Minimum Version | Notes                                                                                      |
-| --------------- | --------------- | ------------------------------------------------------------------------------------------ |
-| TinyBase        | v8+             | Native object/array cells, middleware, `MergeableStore`, `createIndexedDbPersister`        |
-| MobX            | v6+             | `makeObservable`, `observable`, `computed`, `reaction`                                     |
-| mobx-react-lite | v4+             | `observer()` HOC for React components                                                      |
-| React           | v18+ / v19      | Suspense support required for lazy hydration                                               |
-| TypeScript      | v5+             | TC39 decorators preferred; `experimentalDecorators` supported in MobX 6, dropped in MobX 7 |
-| uuid            | v10+            | UUID v7 for time-ordered entity IDs (v12+ drops CJS)                                       |
-| nanoid          | v5+             | Compact IDs for ephemeral transaction IDs                                                  |
+| Dependency      | Minimum Version          | Notes                                                                                                                                                                                                                                                                                                    |
+| --------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TinyBase        | v8+                      | Native object/array cells, middleware, `MergeableStore`, `createIndexedDbPersister`                                                                                                                                                                                                                      |
+| MobX            | v6+                      | `makeObservable`, `observable`, `computed`, `reaction`                                                                                                                                                                                                                                                   |
+| mobx-react-lite | v4+                      | `observer()` HOC for React components                                                                                                                                                                                                                                                                    |
+| React           | v18+ / v19               | Suspense support required for lazy hydration                                                                                                                                                                                                                                                             |
+| TypeScript      | v5+                      | TC39 decorators preferred; `experimentalDecorators` supported in MobX 6, dropped in MobX 7                                                                                                                                                                                                               |
+| uuid            | v10+                     | UUID v7 for time-ordered entity IDs (v12+ drops CJS)                                                                                                                                                                                                                                                     |
+| nanoid          | v5+                      | Compact IDs for ephemeral transaction IDs                                                                                                                                                                                                                                                                |
+| `tsconfig.json` | `isolatedModules: false` | This skill uses `const enum` throughout. `const enum` requires `isolatedModules: false` — **incompatible with Vite, esbuild, and SWC** (which require `isolatedModules: true`). If you use one of those bundlers, replace every `const enum` with a regular `enum` or an `as const` object + type alias. |
 
 ## When to Use (and When NOT to)
 

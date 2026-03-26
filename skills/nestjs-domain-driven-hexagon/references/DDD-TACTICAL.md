@@ -42,7 +42,23 @@ import {
   ArgumentOutOfRangeException,
 } from '@libs/exceptions';
 
-export type AggregateID = string;
+/**
+ * Branded nominal type for aggregate root IDs.
+ *
+ * Using `Brand<string, T>` rather than a plain `string` alias prevents
+ * accidentally passing a `UserId` where a `WalletId` is expected at the
+ * type level — the compiler catches the mix-up, not a runtime exception.
+ *
+ * Usage:
+ *   type UserId  = AggregateID<'UserId'>;
+ *   type WalletId = AggregateID<'WalletId'>;
+ *
+ *   function findWallet(id: WalletId): Wallet { ... }
+ *   const userId = '...' as UserId;
+ *   findWallet(userId); // TS error: UserId is not assignable to WalletId ✓
+ */
+type Brand<K, T> = K & { __brand: T };
+export type AggregateID<T extends string = string> = Brand<string, T>;
 
 export interface BaseEntityProps {
   id: AggregateID;
@@ -257,7 +273,7 @@ export abstract class ValueObject<T> {
    */
   public equals(vo?: ValueObject<T>): boolean {
     if (vo === undefined) return false;
-    return JSON.stringify(this) === JSON.stringify(vo);
+    return JSON.stringify(this.props) === JSON.stringify(vo.props);
   }
 
   /**
@@ -716,6 +732,8 @@ export class UserNotFoundError extends ExceptionBase {
 ```typescript
 // src/libs/exceptions/exception.base.ts
 
+import { RequestContextService } from '@libs/application/context/request-context.service';
+
 export interface SerializedException {
   message: string;
   code: string;
@@ -744,7 +762,7 @@ export abstract class ExceptionBase extends Error {
       stack: this.stack,
       cause: this.cause?.message,
       metadata: this.metadata,
-      correlationId: '',
+      correlationId: RequestContextService.getRequestId() ?? '',
     };
   }
 }
@@ -858,7 +876,7 @@ export class Guard {
     if (Array.isArray(value) && value.length === 0) return true;
     if (
       typeof value === 'object' &&
-      value !== undefined &&
+      value !== null &&
       Object.keys(value).length === 0
     )
       return true;

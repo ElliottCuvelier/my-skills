@@ -173,6 +173,16 @@ After bootstrapping, models with `loadStrategy: instant` are hydrated into memor
 
 ```typescript
 class SyncClient {
+  /** Monotonically increasing sync cursor — mirrors the last processed delta's `id`. */
+  public lastSyncId: number = 0;
+
+  /**
+   * Sync group keys the client is currently subscribed to.
+   * Sent in the WebSocket handshake and with every delta request so the server
+   * knows which groups to include in delta packets.
+   */
+  public subscribedSyncGroups: string[] = [];
+
   private modelLookup = new Map<string, Model>();
 
   addModelToLiveCollections(model: Model): void {
@@ -217,6 +227,8 @@ After bootstrap completes and persisted transactions are loaded, the client esta
 
 ```typescript
 class SyncClient {
+  public lastSyncId: number = 0;
+  public subscribedSyncGroups: string[] = [];
   private ws: WebSocket;
 
   startSyncing(): void {
@@ -301,6 +313,34 @@ Delta packets contain an array of sync actions. Each action has a type indicatin
 ```
 
 Delta packets may contain more changes than the original transaction because the server can trigger side effects (creating history records, updating counters, sending notifications).
+
+### SyncAction Interface
+
+Every element in a delta packet conforms to the `SyncAction` interface:
+
+```typescript
+export interface SyncAction {
+  /** Server-assigned monotonic sync ID for this action. */
+  id: number;
+  /** Name of the model affected (e.g. `'Issue'`, `'User'`). */
+  modelName: string;
+  /** UUID v7 of the affected model instance. */
+  modelId: string;
+  /**
+   * Action type:
+   * - `'I'` Insert — new model created on server
+   * - `'U'` Update — model fields changed on server
+   * - `'D'` Delete — model deleted on server
+   * - `'A'` Archive — model archived on server
+   * - `'V'` Verify — confirms a locally-created model (server accepted UUID)
+   * - `'C'` Conflict — server rejected a local transaction; client must revert
+   * - `'G'` Group — sync group membership changed
+   */
+  action: 'I' | 'U' | 'D' | 'A' | 'V' | 'C' | 'G';
+  /** Full or partial row data for Insert/Update/Verify actions. */
+  data: Record<string, unknown>;
+}
+```
 
 ### Applying Deltas
 

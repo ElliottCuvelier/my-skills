@@ -144,7 +144,7 @@ The `tableName` argument maps directly to a TinyBase table name. Convention: low
 Marks a field as observable and synced. The field will be persisted to TinyBase and changes will generate `UpdateTransaction`s.
 
 ```typescript
-export function Property() {
+export function Property(type: PropertyMetadata['type'] = 'string') {
   return function (target: unknown, propertyKey: string): void {
     const modelName = (target as { constructor: { name: string } }).constructor
       .name;
@@ -166,7 +166,7 @@ export function Property() {
 
     metadata.properties.set(propertyKey, {
       key: propertyKey,
-      type: 'string',
+      type,
       isObservable: true,
     });
   };
@@ -176,15 +176,20 @@ export function Property() {
 **Usage:**
 
 ```typescript
-@Property()
+@Property()            // defaults to 'string' — no change needed for string fields
 public title!: string;
 
-@Property()
+@Property('number')    // explicit type for non-string primitives
 public priority!: number;
+
+@Property('boolean')
+public isActive!: boolean;
 
 @Property()
 public description: string | undefined;
 ```
+
+Passing the correct `type` matters for TinyBase schema generation: if a `number` property is registered as `'string'`, TinyBase will coerce the cell value and schema validation will fail.
 
 Only primitive types and serializable values should use `@Property`. Relationships use `@ManyToOne` or `@OneToMany` instead.
 
@@ -222,8 +227,10 @@ export function ManyToOne<T>(relatedName: string | undefined = undefined) {
           targetModel.toLowerCase() + 's',
           fkValue,
         );
-        if (row === undefined) return undefined;
-        return row as T;
+        // TinyBase returns {} (not undefined) for missing rows
+        if (Object.keys(row).length === 0) return undefined;
+        // In full implementation: hydrate to model instance via ObjectPool
+        return ObjectPool.getOrCreate(targetModel, fkValue, row) as T;
       },
       enumerable: true,
       configurable: true,
@@ -298,6 +305,20 @@ export abstract class Model {
   hydrate(rowData: Record<string, unknown>): void; // Populate from TinyBase row (no transactions)
   toRow(): Record<string, unknown>; // Serialize to TinyBase row format
   toJSON(): Record<string, unknown>; // Serialize for GraphQL
+
+  /**
+   * Activate MobX observability for all @Property fields on this instance.
+   * Called by SyncClient after hydrate() during bootstrap / delta processing.
+   * Delegates to makeObservable() with the MobX config registered by @ClientModel.
+   */
+  makeObservable(): void;
+
+  /**
+   * Wire up computed relationship getters (@ManyToOne / @OneToMany).
+   * Must be called after makeObservable() so that computed values can
+   * observe the foreign-key @Property fields they depend on.
+   */
+  attachReferences(): void;
 
   // Static queries (read from TinyBase)
   static find<T extends Model>(id: string): T | undefined;
@@ -395,8 +416,11 @@ export class Collection<T extends Model> {
     rowIds.forEach((rowId) => {
       const row = store.getRow(tableName, rowId);
       if (row[this.foreignKey] === this.owner.id) {
-        // Hydrate to model instance
-        results.push(row as T);
+        // Hydrate via ObjectPool so callers get a real Model instance
+        // with MobX observability and class methods, not a raw TinyBase row.
+        results.push(
+          ObjectPool.getOrCreate(this.targetModelName, rowId, row) as T,
+        );
       }
     });
 
@@ -449,6 +473,40 @@ This ensures that model changes (new properties, new models, removed fields) are
 - **Entity IDs**: UUID v7 via `uuid` package -- time-ordered, database-friendly, globally unique
 - **Transaction IDs**: Nano ID via `nanoid` package -- compact, URL-safe, ephemeral (transactions are short-lived)
 
+### Branded ID Types
+
+Use branded types so the compiler prevents passing an `IssueId` where a `UserId` is expected:
+
+```typescript
+type Brand<K, T> = K & { __brand: T };
+
+/** Branded entity ID types — prevent cross-model ID confusion at compile time. */
+export type IssueId = Brand<string, 'IssueId'>;
+export type UserId = Brand<string, 'UserId'>;
+export type TeamId = Brand<string, 'TeamId'>;
+export type TransactionId = Brand<string, 'TransactionId'>;
+
+// The model base class then declares:
+export abstract class Model {
+  public id: Brand<string, string>; // narrowed per model
+  // ...
+}
+
+// In concrete models, narrow the id type:
+@ClientModel('issues')
+export class Issue extends Model {
+  declare public id: IssueId;
+  // ...
+}
+
+// Usage — type-safe call sites
+function resolveIssue(id: IssueId): Issue | undefined {
+  return Issue.find(id);
+}
+const userId = 'u-123' as UserId;
+resolveIssue(userId); // TS error: UserId is not assignable to IssueId ✓
+```
+
 ### Enums
 
 Always use `const enum` with `SCREAMING_SNAKE_CASE`:
@@ -462,6 +520,18 @@ const enum ItemStatus {
 ```
 
 Zero runtime overhead. Values are inlined at compile time.
+
+> **`isolatedModules` compatibility:** `const enum` requires `isolatedModules: false` in `tsconfig.json`. This is **incompatible with Vite, esbuild, and SWC**, which all mandate `isolatedModules: true`. If your bundler requires `isolatedModules: true`, replace `const enum` with a regular `enum` (safe across file boundaries) or an `as const` object + union type alias:
+>
+> ```typescript
+> // isolatedModules-safe alternative
+> const ItemStatus = {
+>   DRAFT: 'DRAFT',
+>   PUBLISHED: 'PUBLISHED',
+>   ARCHIVED: 'ARCHIVED',
+> } as const;
+> type ItemStatus = (typeof ItemStatus)[keyof typeof ItemStatus];
+> ```
 
 ### Null Policy
 
@@ -522,7 +592,7 @@ export class Item extends Model {
   @Property()
   public title!: string;
 
-  @Property()
+  @Property('string')
   public status!: ItemStatus;
 
   @Property()

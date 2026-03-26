@@ -306,8 +306,13 @@ export abstract class PrismaRepositoryBase<
   /**
    * Returns the active transaction client if one exists in the
    * request context, otherwise falls back to the default PrismaService.
+   *
+   * PrismaClient structurally satisfies Prisma.TransactionClient (it is a strict
+   * superset), so narrowing the return type here eliminates the union and means
+   * concrete repositories can call `this.client.user.findUnique(...)` without any
+   * cast — while still correctly honouring an active transaction when one exists.
    */
-  protected get client(): PrismaClient | Prisma.TransactionClient {
+  protected get client(): Prisma.TransactionClient {
     return (
       (RequestContextService.getTransactionConnection() as Prisma.TransactionClient) ??
       this.prisma
@@ -317,9 +322,7 @@ export abstract class PrismaRepositoryBase<
   private get model() {
     return (this.client as Record<string, unknown>)[this.modelName] as {
       create: (args: { data: DbModel }) => Promise<DbModel>;
-      findUnique: (args: {
-        where: { id: string };
-      }) => Promise<DbModel | undefined>;
+      findUnique: (args: { where: { id: string } }) => Promise<DbModel | null>;
       findMany: (args?: Record<string, unknown>) => Promise<DbModel[]>;
       delete: (args: { where: { id: string } }) => Promise<DbModel>;
       count: (args?: Record<string, unknown>) => Promise<number>;
@@ -472,14 +475,14 @@ export class UserRepository
 
   async findOneByEmail(email: string): Promise<UserEntity | undefined> {
     const record = await this.client.user.findUnique({ where: { email } });
-    return record ? this.mapper.toDomain(record as UserRecord) : undefined;
+    return record ? this.mapper.toDomain(record) : undefined;
   }
 
   async updateAddress(user: UserEntity): Promise<void> {
     user.validate();
     const address = user.getProps().address;
 
-    await (this.client as PrismaService).user.update({
+    await this.client.user.update({
       where: { id: user.id },
       data: {
         country: address.country,

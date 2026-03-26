@@ -176,7 +176,7 @@ Props-based components:
 With a local-first architecture, MobX models are the single source of truth for all persistent state. User preferences like theme, sidebar default, and notification settings are `@Property()` fields on a `UserSettings` model -- synced across devices for free. Ephemeral per-component state (a modal being open, a dropdown expanded) stays in React `useState`. No third state management layer is needed.
 
 ```typescript
-@ClientModel({ tableName: 'userSettings' })
+@ClientModel('userSettings')
 class UserSettings extends Model {
   @Property()
   theme: Theme = Theme.LIGHT;
@@ -230,7 +230,7 @@ function IssueActions({ issueId }: { issueId: string }) {
 
 ## Suspense Boundaries for Lazy Data
 
-For data with `partial` or `lazy` load strategy, wrap the consuming component in a Suspense boundary:
+For data with `partial` or `lazy` load strategy, wrap the consuming component in a Suspense boundary. Lazy collections expose a `.hydrate()` method that returns a Promise; pass it directly to the React 18 `use()` hook:
 
 ```typescript
 import { Suspense } from 'react';
@@ -255,23 +255,19 @@ function IssuePage({ issueId }: { issueId: string }) {
 }
 ```
 
-The `IssueComments` component uses `resolvePromise` to integrate with Suspense:
+The `IssueComments` component uses the React 18 `use()` hook to integrate with Suspense:
 
 ```typescript
+import { use } from 'react'; // React 18+
 import { observer } from 'mobx-react-lite';
-
-function resolvePromise<T>(promise: Promise<T>): T {
-  const p = promise as Promise<T> & { status?: string; value?: T; reason?: unknown };
-  if (p.status === 'fulfilled') return p.value as T;
-  if (p.status === 'rejected') throw p.reason;
-  throw p;
-}
 
 export const IssueComments = observer(({ issueId }: { issueId: string }) => {
   const issue = Issue.find(issueId);
   if (issue === undefined) return undefined;
 
-  const comments = resolvePromise(issue.comments.hydrate());
+  // use() unwraps the Promise and throws to the nearest Suspense boundary
+  // while the data is loading — no hand-rolled status tracking needed.
+  const comments = use(issue.comments.hydrate());
 
   return (
     <div>
@@ -282,6 +278,8 @@ export const IssueComments = observer(({ issueId }: { issueId: string }) => {
   );
 });
 ```
+
+> **React 17 fallback:** If you must support React 17, you can implement the wrapPromise pattern manually. This is not recommended — upgrade to React 18+ to use the stable `use()` API.
 
 **Alternative: non-Suspense lazy loading**
 

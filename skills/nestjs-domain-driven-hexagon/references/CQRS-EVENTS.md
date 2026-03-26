@@ -124,13 +124,20 @@ export class Command {
 
 import { Command } from '@libs/ddd';
 
+export interface CreateUserCommandProps {
+  readonly email: string;
+  readonly country: string;
+  readonly postalCode: string;
+  readonly street: string;
+}
+
 export class CreateUserCommand extends Command {
   readonly email: string;
   readonly country: string;
   readonly postalCode: string;
   readonly street: string;
 
-  constructor(props: CreateUserCommand) {
+  constructor(props: CreateUserCommandProps) {
     super(props);
     this.email = props.email;
     this.country = props.country;
@@ -250,6 +257,15 @@ Queries are intentionally simple. Most carry pagination params and filter criter
 
 import { Query } from '@libs/ddd';
 
+export interface FindUsersQueryProps {
+  readonly limit: number;
+  readonly page: number;
+  readonly offset: number;
+  readonly orderBy: { field: string; param: 'asc' | 'desc' };
+  readonly country?: string;
+  readonly postalCode?: string;
+}
+
 export class FindUsersQuery extends Query {
   readonly limit: number;
   readonly page: number;
@@ -258,9 +274,14 @@ export class FindUsersQuery extends Query {
   readonly country?: string;
   readonly postalCode?: string;
 
-  constructor(props: FindUsersQuery) {
+  constructor(props: FindUsersQueryProps) {
     super();
-    Object.assign(this, props);
+    this.limit = props.limit;
+    this.page = props.page;
+    this.offset = props.offset;
+    this.orderBy = props.orderBy;
+    this.country = props.country;
+    this.postalCode = props.postalCode;
   }
 }
 ```

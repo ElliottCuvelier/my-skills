@@ -204,6 +204,8 @@ export const IssueCard = observer(({ issueId }: { issueId: string }) => {
 ### List with Filtering
 
 ```typescript
+// NOTE: const enum requires isolatedModules: false. Replace with a regular enum
+// or as const object if your bundler (Vite/esbuild/SWC) mandates isolatedModules: true.
 const enum IssueFilter {
   ALL = 'ALL',
   OPEN = 'OPEN',
