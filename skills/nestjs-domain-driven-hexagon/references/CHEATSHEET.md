@@ -73,7 +73,7 @@ Dependencies: Infrastructure → Application → Domain (inward only)
 ```
 Pure business logic, no I/O?             → domain/
 Orchestrates domain + side effects?      → commands/ or queries/
-Talks to external systems?               → database/ or infrastructure/
+Talks to external systems?               → infrastructure/persistence/ or infrastructure/adapters/
 Defines interaction interface?           → *.repository.port.ts
 Implements a port?                       → *.repository.ts
 Handles HTTP/GraphQL/CLI input?          → *.http.controller.ts
@@ -138,7 +138,7 @@ Step-by-step when adding a new use case. Follow this order.
 - [ ] **Port** -- Add repository port method if new persistence needed (`user.repository.port.ts`)
 - [ ] **Infrastructure** -- Implement repository method in Prisma adapter (`user.repository.ts`)
 - [ ] **Infrastructure** -- Update mapper if new fields (`user.mapper.ts`)
-- [ ] **Infrastructure** -- Update Prisma schema + run migration if schema changed
+- [ ] **Infrastructure** -- Update aggregate's `.prisma` schema file + run migration if schema changed
 - [ ] **Interface** -- Create request DTO with `class-validator` decorators
 - [ ] **Interface** -- Create HTTP controller dispatching the command
 - [ ] **Interface** -- Create/update response DTO
@@ -165,7 +165,7 @@ Step-by-step when adding a new use case. Follow this order.
 - [ ] **Domain** -- Create associated value objects
 - [ ] **Domain** -- Define domain events
 - [ ] **Domain** -- Define repository port interface
-- [ ] **Infrastructure** -- Create Prisma schema model
+- [ ] **Infrastructure** -- Create per-aggregate `.prisma` schema file in `infrastructure/persistence/`
 - [ ] **Infrastructure** -- Run migration
 - [ ] **Infrastructure** -- Create mapper (domain ↔ persistence)
 - [ ] **Infrastructure** -- Implement repository extending `PrismaRepositoryBase`

@@ -606,7 +606,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { Inject, Injectable } from '@nestjs/common';
 import { UserCreatedDomainEvent } from '@modules/user/domain/events/user-created.domain-event';
 import { WALLET_REPOSITORY } from '../../wallet.di-tokens';
-import { WalletRepositoryPort } from '../../database/wallet.repository.port';
+import { WalletRepositoryPort } from '../../infrastructure/persistence/wallet.repository.port';
 import { WalletEntity } from '../../domain/wallet.entity';
 
 @Injectable()

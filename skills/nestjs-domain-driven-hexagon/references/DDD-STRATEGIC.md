@@ -266,7 +266,7 @@ This works because NestJS CQRS registers handlers globally. The Order module doe
 When integrating with an external system or a legacy module whose model doesn't match yours, create an adapter that translates between vocabularies:
 
 ```typescript
-// src/modules/billing/infrastructure/stripe-payment.adapter.ts
+// src/modules/billing/infrastructure/adapters/stripe-payment.adapter.ts
 
 import { Injectable } from '@nestjs/common';
 import { PaymentPort } from '../domain/payment.port';
@@ -298,7 +298,7 @@ The ACL ensures that external API changes or legacy model quirks don't leak into
 ```typescript
 // BAD -- Order module directly importing User module internals
 import { UserEntity } from '@modules/user/domain/user.entity';
-import { UserRepository } from '@modules/user/database/user.repository';
+import { UserRepository } from '@modules/user/infrastructure/persistence/user.repository';
 
 // GOOD -- Reference by ID, communicate through events/queries
 interface OrderProps {

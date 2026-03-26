@@ -58,7 +58,7 @@ Infrastructure → Application → Domain
 Where does it go?
 ├─ Pure business logic, no I/O           → domain/
 ├─ Orchestrates domain + has side effects → commands/ or queries/ (application layer)
-├─ Talks to external systems              → database/ or infrastructure/
+├─ Talks to external systems              → infrastructure/persistence/ or infrastructure/adapters/
 ├─ Defines HOW to interact (interface)    → port (*.repository.port.ts or libs/ports/)
 ├─ Implements a port                      → adapter (*.repository.ts, infrastructure/)
 └─ Handles HTTP/GraphQL/CLI input         → *.http.controller.ts, *.graphql-resolver.ts
@@ -106,45 +106,55 @@ Each NestJS `@Module()` maps to a bounded context. Treat module internals as pri
 ## Directory Structure
 
 ```
+prisma.config.ts                                 # Prisma v7 config: schema: "src/"
+prisma/
+├── migrations/                                  # Prisma migrations (configured in prisma.config.ts)
+└── seed.ts                                      # Seed data
 src/
+├── schema.prisma                                # Generator + datasource blocks ONLY
 ├── modules/
 │   └── {module-name}/
-│       ├── {module-name}.module.ts          # NestJS module (composition root)
-│       ├── {module-name}.di-tokens.ts       # DI token constants
-│       ├── {module-name}.mapper.ts          # Domain <-> Persistence mapper
+│       ├── {module-name}.module.ts              # NestJS module (composition root)
+│       ├── {module-name}.di-tokens.ts           # DI token constants
+│       ├── {module-name}.mapper.ts              # Domain <-> Persistence mapper
 │       ├── domain/
-│       │   ├── {entity}.entity.ts           # Aggregate root / entities
-│       │   ├── {entity}.types.ts            # Domain types and interfaces
-│       │   ├── {entity}.errors.ts           # Domain error classes
+│       │   ├── {entity}.entity.ts               # Aggregate root / entities
+│       │   ├── {entity}.types.ts                # Domain types and interfaces
+│       │   ├── {entity}.errors.ts               # Domain error classes
 │       │   ├── value-objects/
 │       │   │   └── {vo}.value-object.ts
 │       │   └── events/
 │       │       └── {event}.domain-event.ts
 │       ├── commands/
 │       │   └── {use-case}/
-│       │       ├── {use-case}.command.ts            # Command DTO
-│       │       ├── {use-case}.service.ts            # Command handler
-│       │       ├── {use-case}.http.controller.ts    # HTTP entry point
-│       │       └── {use-case}.request.dto.ts        # Request validation
+│       │       ├── {use-case}.command.ts         # Command DTO
+│       │       ├── {use-case}.service.ts         # Command handler
+│       │       ├── {use-case}.http.controller.ts # HTTP entry point
+│       │       └── {use-case}.request.dto.ts     # Request validation
 │       ├── queries/
 │       │   └── {query}/
 │       │       ├── {query}.query-handler.ts
 │       │       ├── {query}.http.controller.ts
 │       │       └── {query}.request.dto.ts
-│       ├── database/
-│       │   ├── {entity}.repository.port.ts  # Repository interface (DRIVEN PORT)
-│       │   └── {entity}.repository.ts       # Prisma implementation
+│       ├── infrastructure/
+│       │   ├── persistence/
+│       │   │   ├── {entity}.repository.port.ts  # Repository interface (DRIVEN PORT)
+│       │   │   ├── {entity}.repository.ts       # Prisma implementation
+│       │   │   └── {aggregate}.prisma           # Per-aggregate Prisma schema
+│       │   └── adapters/                        # External service adapters (optional)
+│       │       ├── {service}.port.ts
+│       │       └── {service}.adapter.ts
 │       └── dtos/
-│           └── {entity}.response.dto.ts     # Response serialization
+│           └── {entity}.response.dto.ts         # Response serialization
 ├── libs/
-│   ├── ddd/                                 # Base classes (Entity, AggregateRoot, ValueObject, DomainEvent)
-│   ├── api/                                 # Shared API utilities, response bases, interceptors
-│   ├── ports/                               # Shared port interfaces (LoggerPort, etc.)
-│   └── exceptions/                          # Base exception classes and error codes
+│   ├── ddd/                                     # Base classes (Entity, AggregateRoot, ValueObject, DomainEvent)
+│   ├── api/                                     # Shared API utilities, response bases, interceptors
+│   ├── ports/                                   # Shared port interfaces (LoggerPort, etc.)
+│   └── exceptions/                              # Base exception classes and error codes
 └── main.ts
 ```
 
-This structure uses **vertical slicing** -- each use case (command or query) gets its own directory containing the handler, controller, DTO, and command/query object. Files that change together live together.
+This structure uses **vertical slicing** -- each use case (command or query) gets its own directory containing the handler, controller, DTO, and command/query object. Files that change together live together. Prisma schema files are split per aggregate and co-located with the repository implementation so that each module owns its persistence model.
 
 ## DDD Building Blocks
 
@@ -180,9 +190,9 @@ This structure uses **vertical slicing** -- each use case (command or query) get
 
 1. **Discover the Domain** -- Event Storming, conversations with domain experts, identify aggregates and bounded contexts.
 2. **Model the Domain** -- Entities, value objects, aggregates, domain events. No infrastructure code yet.
-3. **Define Ports** -- Repository interfaces, external service interfaces. Place in `database/` and `libs/ports/`.
+3. **Define Ports** -- Repository interfaces, external service interfaces. Place in `infrastructure/persistence/` and `libs/ports/`.
 4. **Implement Use Cases** -- Command and query handlers in `commands/` and `queries/` directories.
-5. **Add Adapters Last** -- Prisma repositories, HTTP controllers, mappers. Wire everything in the NestJS module.
+5. **Add Adapters Last** -- Prisma schema (`.prisma` file per aggregate), Prisma repositories, HTTP controllers, mappers. Wire everything in the NestJS module.
 
 **DDD is collaborative.** Modeling sessions with domain experts are as important as the code patterns.
 

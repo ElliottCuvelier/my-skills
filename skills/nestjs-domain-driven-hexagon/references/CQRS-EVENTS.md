@@ -152,7 +152,7 @@ import { Inject } from '@nestjs/common';
 import { Err, Ok, Result } from 'oxide.ts';
 import { AggregateID } from '@libs/ddd';
 import { USER_REPOSITORY } from '../../user.di-tokens';
-import { UserRepositoryPort } from '../../database/user.repository.port';
+import { UserRepositoryPort } from '../../infrastructure/persistence/user.repository.port';
 import { UserEntity } from '../../domain/user.entity';
 import { Address } from '../../domain/value-objects/address.value-object';
 import { UserAlreadyExistsError } from '../../domain/user.errors';

@@ -119,7 +119,7 @@ The command handler calls `repository.transaction(async () => { ... })` to wrap 
 ### Module-Specific Port Extension
 
 ```typescript
-// src/modules/user/database/user.repository.port.ts
+// src/modules/user/infrastructure/persistence/user.repository.port.ts
 
 import { RepositoryPort } from '@libs/ddd';
 import { UserEntity } from '../domain/user.entity';

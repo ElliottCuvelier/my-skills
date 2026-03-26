@@ -149,14 +149,38 @@ model User {
 - `@default(now())` and `@updatedAt` -- automatic timestamp management.
 - `@@map("users")` -- decouples Prisma model name from table name.
 
-### Example Schema
+### Multi-File Schema (Per-Aggregate)
+
+Prisma schemas are split per aggregate and co-located alongside the repository implementation. Prisma v7 uses `prisma.config.ts` to discover all `.prisma` files under the configured schema directory. Set `schema: "src/"` so each module owns its aggregate's schema file.
+
+#### prisma.config.ts
+
+```typescript
+// prisma.config.ts (project root)
+
+import { defineConfig, env } from 'prisma/config';
+import 'dotenv/config';
+
+export default defineConfig({
+  schema: 'src/',
+  migrations: {
+    path: 'prisma/migrations',
+    seed: 'tsx prisma/seed.ts',
+  },
+  datasource: {
+    url: env('DATABASE_URL'),
+  },
+});
+```
+
+#### Base Schema (Generator + Datasource)
 
 ```prisma
-// prisma/schema.prisma
+// src/schema.prisma
 
 generator client {
   provider     = "prisma-client"
-  output       = "../src/generated/prisma"
+  output       = "./generated/prisma"
   moduleFormat = "cjs"
 }
 
@@ -164,6 +188,16 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+```
+
+This file contains only the generator and datasource blocks -- no models. Models live alongside their aggregate's repository.
+
+#### Per-Aggregate Schema Files
+
+Each aggregate root gets its own `.prisma` file co-located with its repository:
+
+```prisma
+// src/modules/user/infrastructure/persistence/user.prisma
 
 enum UserRole {
   ADMIN
@@ -185,6 +219,10 @@ model User {
 
   @@map("users")
 }
+```
+
+```prisma
+// src/modules/wallet/infrastructure/persistence/wallet.prisma
 
 model Wallet {
   id        String   @id @default(uuid())
@@ -198,6 +236,17 @@ model Wallet {
   @@map("wallets")
 }
 ```
+
+Prisma automatically resolves cross-file references -- `Wallet` can reference `User` even though they live in different `.prisma` files. The `wallets Wallet[]` relation field in `User` and the `user User @relation(...)` in `Wallet` are resolved at generation time across the entire schema directory tree.
+
+#### Schema File Ownership
+
+| File Location                                                        | Contains                           | Owned By              |
+| -------------------------------------------------------------------- | ---------------------------------- | --------------------- |
+| `src/schema.prisma`                                                  | Generator + datasource blocks only | Shared infrastructure |
+| `src/modules/{module}/infrastructure/persistence/{aggregate}.prisma` | Models and enums for one aggregate | Module team           |
+
+This keeps merge conflicts localized -- changes to the User aggregate never conflict with changes to the Wallet aggregate.
 
 ### Relations vs Domain References
 
@@ -394,17 +443,17 @@ If `RequestContextService.getTransactionConnection()` is already set, `transacti
 ## Concrete Repository Example
 
 ```typescript
-// src/modules/user/database/user.repository.ts
+// src/modules/user/infrastructure/persistence/user.repository.ts
 
 import { Injectable, Inject } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '@libs/db/prisma.service';
 import { PrismaRepositoryBase } from '@libs/db/prisma-repository.base';
-import { UserEntity } from '../domain/user.entity';
-import { UserMapper } from '../user.mapper';
+import { UserEntity } from '../../domain/user.entity';
+import { UserMapper } from '../../user.mapper';
 import { UserRepositoryPort } from './user.repository.port';
 import { LoggerPort } from '@libs/ports/logger.port';
-import { USER_LOGGER } from '../user.di-tokens';
+import { USER_LOGGER } from '../../user.di-tokens';
 import { User as UserRecord } from '@generated/prisma';
 
 @Injectable()
@@ -567,6 +616,8 @@ Use `Serializable` only when strict consistency is required (e.g., financial ope
 
 ### Development Workflow
 
+All CLI commands automatically read `prisma.config.ts` from the project root, which specifies `schema: "src/"` and `migrations.path: "prisma/migrations"`.
+
 ```bash
 # Create and apply a new migration
 npx prisma migrate dev --name add_wallet_table
@@ -577,6 +628,8 @@ npx prisma migrate reset
 # Regenerate Prisma client after schema changes (outputs to the path in your generator config)
 npx prisma generate
 ```
+
+Prisma discovers all `.prisma` files under `src/` and combines them before running any command. New models added in any module's `infrastructure/persistence/` directory are automatically included.
 
 ### Production Deployment
 
@@ -591,8 +644,11 @@ npx prisma migrate deploy
 - **Never edit applied migrations.** Create new migrations to alter previous changes.
 - **Test migrations against a copy of production data** before deploying.
 - **Name migrations descriptively:** `add_user_role_column`, `create_wallets_table`, not `migration_1`.
+- **Schema files are split, migrations are not.** Even though each aggregate has its own `.prisma` file, migrations are generated against the combined schema and stored in a single `prisma/migrations/` directory.
 
 ### Seed Data
+
+Seed configuration lives in `prisma.config.ts` (the `migrations.seed` field). The seed script itself stays in `prisma/seed.ts`:
 
 ```typescript
 // prisma/seed.ts
@@ -620,16 +676,6 @@ main()
   .finally(() => prisma.$disconnect());
 ```
 
-Configure in `package.json`:
-
-```json
-{
-  "prisma": {
-    "seed": "ts-node prisma/seed.ts"
-  }
-}
-```
-
 Run with `npx prisma db seed`.
 
 ---
@@ -644,7 +690,7 @@ Complete example showing how everything connects in a NestJS module:
 import { Module, Logger } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 import { USER_REPOSITORY, USER_LOGGER } from './user.di-tokens';
-import { UserRepository } from './database/user.repository';
+import { UserRepository } from './infrastructure/persistence/user.repository';
 import { UserMapper } from './user.mapper';
 import { CreateUserService } from './commands/create-user/create-user.service';
 import { CreateUserHttpController } from './commands/create-user/create-user.http.controller';

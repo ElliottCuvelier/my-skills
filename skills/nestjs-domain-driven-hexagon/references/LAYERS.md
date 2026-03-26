@@ -189,7 +189,7 @@ import { Inject } from '@nestjs/common';
 import { Err, Ok, Result } from 'oxide.ts';
 import { AggregateID } from '@libs/ddd';
 import { USER_REPOSITORY } from '../../user.di-tokens';
-import { UserRepositoryPort } from '../../database/user.repository.port';
+import { UserRepositoryPort } from '../../infrastructure/persistence/user.repository.port';
 import { UserEntity } from '../../domain/user.entity';
 import { Address } from '../../domain/value-objects/address.value-object';
 import { UserAlreadyExistsError } from '../../domain/user.errors';
@@ -286,27 +286,31 @@ Implements the ports defined by the domain and application layers. This is where
 
 ```
 modules/{module}/
-├── database/
-│   ├── {entity}.repository.port.ts    # Interface (belongs conceptually to domain)
-│   └── {entity}.repository.ts         # Prisma implementation
-├── {module}.mapper.ts                 # Domain <-> Persistence mapper
-└── infrastructure/                    # Optional: other adapters
-    ├── {service}.adapter.ts
-    └── {service}.port.ts
+├── infrastructure/
+│   ├── persistence/
+│   │   ├── {entity}.repository.port.ts    # Interface (belongs conceptually to domain)
+│   │   ├── {entity}.repository.ts         # Prisma implementation
+│   │   └── {aggregate}.prisma             # Per-aggregate Prisma schema
+│   └── adapters/                          # External service adapters (optional)
+│       ├── {service}.port.ts
+│       └── {service}.adapter.ts
+├── {module}.mapper.ts                     # Domain <-> Persistence mapper
 ```
 
 ### Example: Repository implementation
 
 ```typescript
+// src/modules/user/infrastructure/persistence/user.repository.ts
+
 import { Injectable, Inject } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '@libs/db/prisma.service';
 import { PrismaRepositoryBase } from '@libs/db/prisma-repository.base';
-import { UserEntity } from '../domain/user.entity';
-import { UserMapper } from '../user.mapper';
+import { UserEntity } from '../../domain/user.entity';
+import { UserMapper } from '../../user.mapper';
 import { UserRepositoryPort } from './user.repository.port';
 import { LoggerPort } from '@libs/ports/logger.port';
-import { USER_LOGGER } from '../user.di-tokens';
+import { USER_LOGGER } from '../../user.di-tokens';
 
 @Injectable()
 export class UserRepository
@@ -431,7 +435,7 @@ export const USER_REPOSITORY = Symbol('USER_REPOSITORY');
 import { Module } from '@nestjs/common';
 import { CqrsModule } from '@nestjs/cqrs';
 import { USER_REPOSITORY } from './user.di-tokens';
-import { UserRepository } from './database/user.repository';
+import { UserRepository } from './infrastructure/persistence/user.repository';
 import { UserMapper } from './user.mapper';
 import { CreateUserService } from './commands/create-user/create-user.service';
 import { CreateUserHttpController } from './commands/create-user/create-user.http.controller';

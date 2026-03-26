@@ -255,7 +255,7 @@ Test command/query handlers by mocking the driven ports (repositories, external 
 import { Test } from '@nestjs/testing';
 import { CreateUserService } from '@modules/user/commands/create-user/create-user.service';
 import { USER_REPOSITORY } from '@modules/user/user.di-tokens';
-import { UserRepositoryPort } from '@modules/user/database/user.repository.port';
+import { UserRepositoryPort } from '@modules/user/infrastructure/persistence/user.repository.port';
 import { CreateUserCommand } from '@modules/user/commands/create-user/create-user.command';
 import { ConflictException } from '@libs/exceptions';
 
@@ -451,7 +451,7 @@ afterAll(async () => {
 
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '@libs/db/prisma.service';
-import { UserRepository } from '@modules/user/database/user.repository';
+import { UserRepository } from '@modules/user/infrastructure/persistence/user.repository';
 import { UserMapper } from '@modules/user/user.mapper';
 import { UserEntity } from '@modules/user/domain/user.entity';
 import { Address } from '@modules/user/domain/value-objects/address.value-object';
@@ -694,7 +694,7 @@ module.exports = {
       comment: 'Domain layer cannot depend on infrastructure',
       severity: 'error',
       from: { path: '(^|/)domain/' },
-      to: { path: '(^|/)database/|prisma|typeorm|@nestjs/' },
+      to: { path: '(^|/)infrastructure/|prisma|typeorm|@nestjs/' },
     },
     {
       name: 'no-domain-to-api',

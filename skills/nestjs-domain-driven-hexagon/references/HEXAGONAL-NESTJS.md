@@ -41,7 +41,7 @@ export interface RepositoryPort<Entity> {
 ```
 
 ```typescript
-// src/modules/user/database/user.repository.port.ts -- Module-specific port
+// src/modules/user/infrastructure/persistence/user.repository.port.ts -- Module-specific port
 
 import { RepositoryPort } from '@libs/ddd';
 import { UserEntity } from '../domain/user.entity';
@@ -84,11 +84,11 @@ export class CreateUserService implements ICommandHandler {
 
 ### Port Placement
 
-| Port Type                      | Location                                         | Example                   |
-| ------------------------------ | ------------------------------------------------ | ------------------------- |
-| Repository ports               | `modules/{module}/database/*.repository.port.ts` | `UserRepositoryPort`      |
-| Shared infrastructure ports    | `libs/ports/*.port.ts`                           | `LoggerPort`, `EmailPort` |
-| Module-specific external ports | `modules/{module}/infrastructure/*.port.ts`      | `PaymentGatewayPort`      |
+| Port Type                      | Location                                                           | Example                   |
+| ------------------------------ | ------------------------------------------------------------------ | ------------------------- |
+| Repository ports               | `modules/{module}/infrastructure/persistence/*.repository.port.ts` | `UserRepositoryPort`      |
+| Shared infrastructure ports    | `libs/ports/*.port.ts`                                             | `LoggerPort`, `EmailPort` |
+| Module-specific external ports | `modules/{module}/infrastructure/adapters/*.port.ts`               | `PaymentGatewayPort`      |
 
 ### Interface Segregation
 
@@ -123,17 +123,17 @@ An adapter implements a port using a specific technology. It's an `@Injectable()
 ### Driven Adapter Example
 
 ```typescript
-// src/modules/user/database/user.repository.ts
+// src/modules/user/infrastructure/persistence/user.repository.ts
 
 import { Injectable, Inject } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '@libs/db/prisma.service';
 import { PrismaRepositoryBase } from '@libs/db/prisma-repository.base';
-import { UserEntity } from '../domain/user.entity';
-import { UserMapper } from '../user.mapper';
+import { UserEntity } from '../../domain/user.entity';
+import { UserMapper } from '../../user.mapper';
 import { UserRepositoryPort } from './user.repository.port';
 import { LoggerPort } from '@libs/ports/logger.port';
-import { USER_LOGGER } from '../user.di-tokens';
+import { USER_LOGGER } from '../../user.di-tokens';
 
 @Injectable()
 export class UserRepository
@@ -207,7 +207,7 @@ export class UserModule {}
 ```typescript
 import { Inject } from '@nestjs/common';
 import { USER_REPOSITORY } from '../../user.di-tokens';
-import { UserRepositoryPort } from '../../database/user.repository.port';
+import { UserRepositoryPort } from '../../infrastructure/persistence/user.repository.port';
 
 @CommandHandler(CreateUserCommand)
 export class CreateUserService implements ICommandHandler {
@@ -293,7 +293,7 @@ const repositoryProvider = {
 ### In-Memory Adapter for Tests
 
 ```typescript
-// src/modules/user/database/user.in-memory.repository.ts
+// src/modules/user/infrastructure/persistence/user.in-memory.repository.ts
 
 export class InMemoryUserRepository implements UserRepositoryPort {
   private users: Map<string, UserEntity> = new Map();
@@ -427,7 +427,8 @@ modules/user/
 ├── user.mapper.ts     # <-- here
 ├── user.di-tokens.ts
 ├── domain/
-├── database/
+├── infrastructure/
+│   └── persistence/
 └── commands/
 ```
 
