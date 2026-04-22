@@ -1,6 +1,6 @@
 # Cheatsheet
 
-One-screen quick reference. Keep this open while working. Back to [SKILL.md](../SKILL.md).
+One-screen quick reference. Back to [SKILL.md](../SKILL.md).
 
 ---
 
@@ -9,9 +9,10 @@ One-screen quick reference. Keep this open while working. Back to [SKILL.md](../
 Before writing a single line of code:
 
 - [ ] **Search** — `list_issues(filter: { query: "..." })` — is there already an issue?
-- [ ] **Draft + confirm** — title, description, team, project, labels (from `list_issue_labels`), priority, estimate, cycle (from `list_cycles`)
-- [ ] **Create** — `create_issue(...)` after user confirms
-- [ ] **Move state** — `list_issue_statuses` → discover In Progress ID → `update_issue({ stateId })`
+- [ ] **Draft + confirm** — title, description, team, project (find a fit; leave project-less if none), labels (from `list_issue_labels`), priority, estimate, cycle (from `list_cycles`)
+- [ ] **Create** — `save_issue(...)` after user confirms
+- [ ] **Check current state** — `get_issue(issueId)` — already In Progress? skip transition
+- [ ] **Move state** — `list_issue_statuses` → discover In Progress ID → `save_issue({ id, stateId })`
 - [ ] **Surface spec** — create or link a Linear Document if a written spec will be referenced
 
 ---
@@ -20,19 +21,44 @@ Before writing a single line of code:
 
 | Moment | Action |
 | --- | --- |
-| Task starts | `update_issue` → In Progress (discovered, not hard-coded) |
-| PR opened | `update_issue` → In Review (discovered) |
-| PR merged | `update_issue` → Done (discovered) — only if no further work |
-| Blocked | Set `blocked_by` relation; update priority if urgency changed |
+| Task starts | `get_issue` → if Backlog/Todo: `save_issue` → In Progress |
+| PR opened | `get_issue` → if not yet In Review: `save_issue` → In Review |
+| PR merged | `save_issue` → Done (only if no further work) |
+| Blocked | Set `blocked_by` relation; note in Blocker comment |
+
+**Always `get_issue` before transitioning — never regress status.**
+
+---
+
+## Comment Quick Reference
+
+| Type | When | Format |
+| --- | --- | --- |
+| **Progress** | Material step completed (not every commit) | One sentence |
+| **Blocker** | Something preventing motion | What + what's needed to unblock |
+| **Finding** | Scope creep, bug, deviation from spec | Deviation template |
+| ~~Starting work~~ | Never | Status change says it |
+
+```
+// Progress
+save_comment({ issueId, body: "Redis module merged. Rate limiter now unblocked." })
+
+// Blocker
+save_comment({ issueId, body: "**Blocked**: Need auth team token format before proceeding." })
+
+// Finding / Deviation
+save_comment({ issueId, body: "**Deviation**: ...\n**Why**: ...\n**Impact**: ...\n**Decision needed**: ..." })
+```
 
 ---
 
 ## PR / Commit Checklist
 
 - [ ] Every commit on branch has `Linear: ENG-###` in the message
-- [ ] PR body has `Linear: ENG-###` appended (or fills an existing template slot — check first)
+- [ ] PR body has `Linear: ENG-###` appended (or fills existing template slot — check first)
+- [ ] Multiple issues: `Linear: ENG-123, ENG-124`
 - [ ] Branch name is **not** changed
-- [ ] Final `create_comment` summarizes what landed vs. deferred
+- [ ] Final `save_comment` summarizes landed vs. deferred + follow-up issue IDs
 
 ---
 
@@ -43,14 +69,26 @@ Post when (event-driven, not on cadence):
 - [ ] A milestone lands
 - [ ] A blocker surfaces
 - [ ] Scope or timeline materially shifts
-- [ ] Project health changes (on_track → at_risk → off_track)
+- [ ] Health changes (on_track → at_risk → off_track)
 - [ ] A batch of sibling issues completes
 
 ```
-create_project_update(projectId, health, body)
-// health: "on_track" | "at_risk" | "off_track"  (verify enum at runtime)
-// body: health state + what moved + what's next + decisions needed
+create_project_update({ projectId, health: "at_risk", body: "..." })
+// verify tool name at runtime; fallback: save_comment on flagship issue
 ```
+
+---
+
+## End-of-Plan Offer
+
+After any multi-step plan, close with:
+
+> **Translate to Linear?**
+> - **Start working** — create issues, assign, move first to In Progress, begin
+> - **Archive for team** — create in Backlog, unassigned
+> - **Neither**
+
+See [PLAN-TO-LINEAR.md](PLAN-TO-LINEAR.md) for translation rules.
 
 ---
 
@@ -60,7 +98,10 @@ create_project_update(projectId, health, body)
 // Find issues
 list_issues(filter: { team: { key: { eq: "ENG" } }, query: "keyword" })
 
-// Get a specific issue
+// My queue
+list_issues(filter: { assignee: { isMe: { eq: true } }, state: { type: { in: ["started","unstarted"] } } })
+
+// Get a specific issue (always re-read; don't use memory)
 get_issue(id: "ENG-123")
 
 // Discover team workflow states
@@ -72,64 +113,16 @@ list_issue_labels(filter: { team: { id: { eq: teamId } } })
 // Discover current cycle
 list_cycles(filter: { team: { id: { eq: teamId } }, isActive: { eq: true } })
 
-// Create issue (after user confirms draft)
-create_issue({ teamId, projectId, title, description,
-               labelIds, priority, estimate, cycleId, stateId, parentId })
+// Create/update issue (save handles both)
+save_issue({ teamId, projectId, title, description, labelIds, priority, estimate, cycleId, stateId, parentId })
+save_issue({ id: "ENG-123", stateId: inProgressId })
+save_issue({ id: "ENG-123", relations: [{ type: "blocked_by", relatedIssueId: "ENG-456" }] })
 
-// Update state / relations / estimate
-update_issue({ id, stateId })
-update_issue({ id, relations: [{ type: "blocks", relatedIssueId }] })
-update_issue({ id, estimate: 5, priority: 2 })
-
-// Deviation comment
-create_comment({ issueId, body: "**Deviation**: ...\n**Why**: ...\n**Impact**: ...\n**Decision needed**: ..." })
-
-// Project update (verify tool name at runtime)
-create_project_update({ projectId, health: "at_risk", body: "..." })
+// Comment
+save_comment({ issueId: "ENG-123", body: "..." })
 ```
 
----
-
-## Deviation Materiality — Quick Test
-
-"If I described this change to the issue author, would they need to know to update their expectations?"
-
-```
-User-visible behavior changed?   → Comment
-API shape / contract changed?    → Comment
-Scope grew or shrank?            → Comment + possibly project update
-Hard blocker discovered?         → Comment + project update if timeline affected
-Internal refactor only?          → No comment needed
-Library choice (same interface)? → No comment needed
-```
-
----
-
-## Decision Trees (Compact)
-
-### Need a Linear issue?
-
-```
-Linear MCP present + task is non-trivial?
-└── Yes → search first → found? use it : draft + confirm + create
-```
-
-### Sub-issue or new issue?
-
-```
-Direct component of parent? → Sub-issue (parentId)
-Blocks the parent?          → New issue + blocks relation
-Same area, no order?        → New issue + related relation
-Done in <5 min inline?      → No tracking needed
-```
-
-### Comment or Document?
-
-```
-Moment in timeline (deviation, PR link)?  → Comment
-Durable knowledge (spec, ADR, runbook)?   → Document
-"What this issue is about"?               → Issue description
-```
+**Note:** Tools appear namespaced in-session (e.g., `mcp__linear__save_issue`). Check the actual tool list for the correct prefix.
 
 ---
 
@@ -145,11 +138,10 @@ Durable knowledge (spec, ADR, runbook)?   → Document
 
 ---
 
-## Relation Types
+## Estimate / Priority / Cycle Rule
 
-| Type | Meaning |
+| Situation | Action |
 | --- | --- |
-| `blocks` | This issue blocks the related issue |
-| `blocked_by` | This issue is blocked by the related issue |
-| `related` | Same area, no ordering constraint |
-| `duplicate` | Duplicate of the related issue |
+| Field is unset on create or existing issue | Set it |
+| Field is already set, no change needed | Leave it |
+| Field is already set, reality diverges ≥ ~50% | Offer the change to the user first |

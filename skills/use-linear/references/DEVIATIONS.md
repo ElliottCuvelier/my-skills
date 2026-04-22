@@ -1,33 +1,51 @@
-# Deviation Handling Reference
+# Comment Types and Deviation Handling
 
-When to comment, what to write, and when to escalate to a project update. Back to [SKILL.md](../SKILL.md).
+When to comment, what type to use, and when to escalate to a project update. Back to [SKILL.md](../SKILL.md).
 
 ---
 
-## The Materiality Bar
+## The Three Comment Types
 
-Comment on the issue **only** when the deviation is material. Internal implementation choices that don't affect the contract don't need a comment.
+Use `save_comment` for exactly three situations. Everything else is silence.
 
-| Qualifies as material | Does NOT qualify |
+| Type | When | Format |
+| --- | --- | --- |
+| **Progress** | A material step completed — not every commit, only meaningful milestones | One sentence: what completed and what it unblocks |
+| **Blocker** | Something preventing forward motion that the user or team should know about | What's blocking + what's needed to unblock |
+| **Finding** | Something the user or team should know: scope creep, discovered bug, design gap, deviation from spec | Short paragraph; use the structured template for deviations |
+
+**No other comment types.** Specifically:
+- No "starting work now" comment — the status transition is the signal
+- No file-by-file narration of what was done
+- No recap that duplicates what the status change already communicated
+- No "I'm done here" without substance — the PR + final summary comment covers it
+
+---
+
+## The Materiality Bar for Findings / Deviations
+
+Post a Finding comment only when:
+
+| Qualifies | Does NOT qualify |
 | --- | --- |
-| User-visible behavior changes | Refactoring a function's internal structure |
+| User-visible behavior changes | Refactoring internal structure with same external behavior |
 | API contract change (endpoint shape, request/response schema, status codes) | Renaming an internal variable or helper |
 | Scope grows or shrinks | Picking one library over another with equivalent interface |
 | New hard blocker discovered | Reordering logic that produces the same result |
-| Dependency on another team or external service identified | Minor performance optimization with no observable change |
-| Architecture changes that affect other issues or teams | Splitting a large function into smaller ones |
+| Dependency on another team or external service identified | Minor performance optimization, no observable change |
+| Architecture change affecting other issues or teams | Splitting a large function into smaller ones |
 
-**When in doubt:** ask "if I described this change to the person who wrote the issue, would they need to know to update their expectations?" If yes, it's material.
+**When in doubt:** "If I described this to the person who wrote the issue, would they need to update their expectations?" If yes — it's material.
 
 ---
 
-## The Structured Comment Template
+## The Structured Deviation Template
 
-One comment per coherent deviation. Post via `create_comment(issueId: "<id>", body: "...")`.
+For material deviations, use this shape as a Finding comment:
 
 ```
 **Deviation**: <one-line summary — what changed from the spec>
-**Why**: <the new information or constraint that made the original plan wrong or incomplete>
+**Why**: <new information or constraint that made the original plan wrong>
 **Impact**: <what else is affected — other issues, API consumers, scope, timeline>
 **Decision needed**: Yes — <specific question for whom> / No
 ```
@@ -36,87 +54,79 @@ One comment per coherent deviation. Post via `create_comment(issueId: "<id>", bo
 
 ```
 **Deviation**: /auth/refresh now returns { token, expiresAt } instead of { accessToken, ttl }
-**Why**: Frontend team's token library requires `expiresAt` as an ISO timestamp; `ttl` in seconds caused parsing issues.
-**Impact**: All clients consuming /auth/refresh need to update field names. No other endpoints affected.
-**Decision needed**: No — agreed with @frontend-lead in Slack; implementing now.
+**Why**: Frontend token library requires expiresAt as ISO timestamp; ttl in seconds caused parsing issues.
+**Impact**: All clients consuming /auth/refresh need field-name update. No other endpoints affected.
+**Decision needed**: No — agreed with @frontend-lead.
 ```
 
 ### Example — Scope growth
 
 ```
-**Deviation**: Rate limiter requires a Redis module that doesn't exist yet (ENG-790 created as sub-issue)
-**Why**: Assumed Redis was already provisioned in infrastructure; it isn't.
-**Impact**: Adds ~2 days. ENG-789 is now blocked by ENG-790.
+**Deviation**: Rate limiter requires Redis module that doesn't exist yet (ENG-790 created as sub-issue)
+**Why**: Assumed Redis was already provisioned; it isn't.
+**Impact**: Adds ~2 days. ENG-789 now blocked by ENG-790.
 **Decision needed**: Yes — @pm: approve scope extension or descope per-route config to follow-up?
 ```
 
-### Example — Blocker discovered
+### Example — Blocker (use Blocker type, not Deviation template)
 
 ```
-**Deviation**: Cannot migrate sessions table without a maintenance window
-**Why**: The sessions table has 40M rows; online migration would lock the table for ~8 minutes under current load.
-**Impact**: Requires scheduling a maintenance window; blocks ENG-789 until scheduled.
-**Decision needed**: Yes — @infra: what's the earliest maintenance window this week?
+**Blocked**: Cannot migrate sessions table without a maintenance window.
+Need ~8 min window under current load. Waiting on @infra to schedule.
 ```
 
 ---
 
 ## Anti-Flood Rules
 
-| Rule | Rationale |
-| --- | --- |
-| One comment per **coherent** deviation, not per commit or per file changed | A flood of comments makes the issue timeline unreadable; batch related changes into one comment |
-| Do not comment on every approach considered | If you tried two libraries and picked one, just comment if the chosen approach is a material deviation from spec |
-| Do not comment to narrate progress ("working on auth now", "halfway done") | Use project updates for progress; issue comments are for deviations and events |
-| Do not comment when the fix is a direct implementation of the spec | If you're doing exactly what the issue says, silence is correct |
+- One comment per **coherent** deviation — not per commit, not per file changed
+- Don't comment on every approach considered — only on the chosen one if it's a material deviation from spec
+- Don't comment to narrate progress detail — use a Progress comment for milestones only
+- Don't add a comment when the status change already communicates the event
 
 ---
 
 ## When to Update the Document Instead
 
-A comment alone is not enough when the deviation **invalidates part of a spec or design document**. In that case:
+A comment alone is not enough when a deviation **invalidates part of a spec or design Document**:
 
-1. Post the deviation comment (so the timeline is clear)
-2. **Update the Document** to reflect the new truth — don't leave the old spec lying around as a trap for future readers
+1. Post the Finding comment (so the timeline is clear)
+2. **Update the Document** to reflect the new truth
 
-Use the read-before-write protocol:
+Read-before-write:
 
 ```
-get_document(id: "<spec-doc-id>")
-// Edit the specific section that's now wrong
-// Update via runtime-discovered update_document tool
+get_document(id: specDocId)
+// edit the specific section that changed
+// save via runtime-discovered update_document tool
 ```
 
-If the spec document doesn't exist yet and the deviation implies a significant architectural decision, **create a new Document** (confirm with user first).
+If no spec Document exists and the deviation implies a significant architectural decision, create one (confirm with user first). See [DOCUMENTS.md](DOCUMENTS.md).
 
 ---
 
 ## When to Escalate to a Project Update
 
-Post a project update (in addition to the issue comment) when the deviation is large enough to affect the project:
+Post a project update (in addition to the issue comment) when the deviation affects the project:
 
-| Deviation type | Add project update? |
+| Situation | Add project update? |
 | --- | --- |
 | Internal refactor, no timeline impact | No |
-| API shape change, single issue | No (unless other issues depended on that contract) |
+| API shape change, one issue, no timeline impact | No |
 | Scope grows by ≥ 2 days | Yes — health may change |
-| New hard blocker without a clear resolution timeline | Yes — health changes to at_risk or off_track |
-| Other teams or projects are now affected | Yes |
-| Milestone that stakeholders expected to land is delayed | Yes |
+| Hard blocker with unclear resolution timeline | Yes — health → `at_risk` or `off_track` |
+| Other teams or projects now affected | Yes |
+| Milestone stakeholders expected is delayed | Yes |
 
-Project update health states (verify enum values at runtime):
-- `on_track` — proceeding as planned
-- `at_risk` — a problem exists but can likely be resolved within the current plan
-- `off_track` — the current plan is broken; intervention or re-scoping needed
+Health states (verify enum at runtime): `on_track` / `at_risk` / `off_track`.
 
 ---
 
-## Deviation Comment Checklist
-
-Before posting, verify:
+## Comment Checklist
 
 - [ ] Is this actually material (user-visible, API shape, scope, or blocker)?
-- [ ] Am I combining all related aspects of this deviation into one comment (not several)?
-- [ ] Does the comment include all four fields: Deviation / Why / Impact / Decision needed?
-- [ ] If the deviation invalidates a spec Document — have I updated the Document?
+- [ ] Am I combining all related aspects into one comment?
+- [ ] Is this a Progress, Blocker, or Finding — and using the right format?
+- [ ] If a spec Document is invalidated — have I updated the Document too?
 - [ ] If project health is affected — have I also posted a project update?
+- [ ] Am I avoiding narration of what was done file-by-file?

@@ -2,55 +2,53 @@
 
 Intent → tool mapping for the official Linear MCP server. Back to [SKILL.md](../SKILL.md).
 
-> **Runtime-discovery rule:** The tool surface evolves. Before acting, confirm the tool is available in your current session's MCP tool list. If a newer or unified tool exists (e.g., `save_issue` replacing `create_issue`/`update_issue`), prefer the one the server advertises. The names below are correct as of early 2026 — treat them as a stable baseline, not a guarantee.
+> **Primary tools:** `save_issue`, `save_comment`, `save_project` — unified upserts that handle both create and update. Prefer these over any older `create_*`/`update_*` variants if both are available.
+>
+> **MCP namespace:** In-session, tools are prefixed by the MCP server name (e.g., `mcp__linear__save_issue`). Check your session's actual tool list — the prefix varies by client configuration. The names below are the short-form; append the prefix when calling.
+>
+> **Runtime-discovery rule:** The tool surface evolves. Confirm a tool exists in your session before calling it. If a newer equivalent is available, prefer it.
 
 ---
 
-## Confirmed Tools (23)
+## Primary Tools (use these first)
 
-### Querying
+| Intent | Tool | Key params |
+| --- | --- | --- |
+| Create or update an issue | `save_issue` | `id` (omit to create), `teamId`, `title`, `description`, `stateId`, `assigneeId`, `projectId`, `parentId`, `labelIds`, `priority`, `estimate`, `cycleId`, `relations` |
+| Create or update a project | `save_project` | `id` (omit to create), `teamId`, `name`, `description`, `targetDate`, `statusId` |
+| Add or update a comment | `save_comment` | `id` (omit to create), `issueId`, `body` (Markdown) |
+
+---
+
+## Reading Tools (confirmed)
+
+### Querying lists
 
 | Intent | Tool | Key filters / params |
 | --- | --- | --- |
-| Find issues by keyword, team, assignee, status | `list_issues` | `filter.team.key`, `filter.assignee.id`, `filter.state.type`, `query` |
+| Find issues by keyword, team, assignee, status | `list_issues` | `filter.team.key`, `filter.assignee.id`, `filter.assignee.isMe`, `filter.state.type`, `query` |
 | Find projects | `list_projects` | `filter.team.id`, `filter.state` |
 | Find teams in workspace | `list_teams` | — |
 | Find workspace members | `list_users` | — |
 | Find documents attached to a project | `list_documents` | `filter.project.id` |
 | Find active and upcoming cycles | `list_cycles` | `filter.team.id`, `filter.isActive`, `filter.isNext` |
 | Find comments on an issue | `list_comments` | `filter.issue.id` |
-| Find all labels in a team | `list_issue_labels` | `filter.team.id` — **call this before ever writing a label** |
-| Find all workflow states for a team | `list_issue_statuses` | `filter.team.id` — **call this before setting state** |
+| Find all labels in a team | `list_issue_labels` | `filter.team.id` — **call before writing any label** |
+| Find all workflow states for a team | `list_issue_statuses` | `filter.team.id` — **call before setting state** |
 | Find all project-level labels | `list_project_labels` | `filter.project.id` |
 
 ### Reading a single object
 
 | Intent | Tool | Required param |
 | --- | --- | --- |
-| Read full issue detail (description, relations, sub-issues, state) | `get_issue` | `id` (e.g., `"ENG-123"` or the UUID) |
+| Read full issue (description, relations, sub-issues, state) | `get_issue` | `id` — always re-read; never rely on memory |
 | Read full project detail | `get_project` | `id` |
 | Read team detail | `get_team` | `id` |
 | Read user profile | `get_user` | `id` |
 | Read a document's full content | `get_document` | `id` |
 | Read the definition of a workflow state | `get_issue_status` | `id` |
 
-### Creating
-
-| Intent | Tool | Key params |
-| --- | --- | --- |
-| Create an issue (or sub-issue) | `create_issue` | `teamId`, `title`, `description`, `projectId`, `parentId` (sub-issue), `labelIds`, `priority`, `estimate`, `cycleId`, `stateId` |
-| Create a project | `create_project` | `teamId`, `name`, `description`, `targetDate`, `statusId` |
-| Add a comment to an issue | `create_comment` | `issueId`, `body` (Markdown supported) |
-| Create a new label for a team | `create_issue_label` | `teamId`, `name`, `color` — **only after `list_issue_labels` confirms gap and user confirms** |
-
-### Updating
-
-| Intent | Tool | Key params |
-| --- | --- | --- |
-| Update any issue field (state, assignee, estimate, priority, cycle, relations, parent) | `update_issue` | `id`, then any subset of: `stateId`, `assigneeId`, `estimate`, `priority`, `cycleId`, `labelIds`, `parentId`, `relations` |
-| Update a project (name, state, target date) | `update_project` | `id`, then any subset of fields |
-
-### Knowledge / Search
+### Knowledge search
 
 | Intent | Tool | Key params |
 | --- | --- | --- |
@@ -58,81 +56,102 @@ Intent → tool mapping for the official Linear MCP server. Back to [SKILL.md](.
 
 ---
 
+## Creating (legacy / also available)
+
+The `save_*` tools are preferred. If `save_issue` is unavailable, fall back to:
+
+| Intent | Legacy tool |
+| --- | --- |
+| Create an issue | `create_issue` |
+| Update an issue | `update_issue` |
+| Create a comment | `create_comment` |
+| Create a project | `create_project` |
+| Update a project | `update_project` |
+| Create a new label for a team | `create_issue_label` — **only after `list_issue_labels` confirms gap and user confirms** |
+
+---
+
 ## Tentative / Runtime-Verify (2026-era tools)
 
-These tools were announced in Linear's February 2026 changelog. Exact names and parameters are **not confirmed** — verify at runtime against your session's MCP tool list before calling.
+Announced in Linear's February 2026 changelog. Verify exact names at runtime before calling.
 
-| Intent | Likely tool name | Notes |
-| --- | --- | --- |
-| Create an initiative | `create_initiative` | Groups multiple projects at strategy level |
-| Update an initiative | `update_initiative` | — |
-| Post an initiative update | `create_initiative_update` | Health state + narrative |
-| Post a project update | `create_project_update` | Health (`on_track` / `at_risk` / `off_track`) + body |
-| Create a project milestone | `create_project_milestone` | Named gate within a project |
-| Update a project milestone | `update_project_milestone` | — |
-| Manage project labels | `create_project_label` / `update_project_label` | Separate from issue labels |
+| Intent | Likely tool name |
+| --- | --- |
+| Create an initiative | `create_initiative` |
+| Update an initiative | `update_initiative` |
+| Post an initiative update | `create_initiative_update` |
+| Post a project update | `create_project_update` — use `health`: `on_track` / `at_risk` / `off_track` |
+| Create a project milestone | `create_project_milestone` |
+| Manage project labels | `create_project_label` / `update_project_label` |
 
-If `create_project_update` is unavailable, fall back to a `create_comment` on the project's flagship issue.
+Fallback if `create_project_update` is unavailable: `save_comment` on the project's flagship issue.
 
 ---
 
 ## Common Call Patterns
 
-### Start-of-task pattern
+### Start-of-task (full sequence)
 
 ```
-// 1. Discover the team
-list_teams() → pick team → teamId
+list_teams()                          → pick teamId
+list_projects({ teamId })             → pick projectId
+list_issue_labels({ teamId })         → pick existing labelIds
+list_cycles({ teamId, isActive })     → pick cycleId
+// Draft → user confirms →
+save_issue({ teamId, projectId, title, description, labelIds, priority, estimate, cycleId })
+// → returns issueId
 
-// 2. Discover the project
-list_projects(filter: { team: { id: { eq: teamId } } }) → pick project → projectId
-
-// 3. Discover labels
-list_issue_labels(filter: { team: { id: { eq: teamId } } }) → pick from existing
-
-// 4. Discover cycles
-list_cycles(filter: { team: { id: { eq: teamId } }, isActive: { eq: true } }) → cycleId
-
-// 5. Draft + confirm → create
-create_issue({ teamId, projectId, title, description, labelIds, priority, estimate, cycleId })
-
-// 6. Discover states
-list_issue_statuses(filter: { team: { id: { eq: teamId } } }) → in-progress state → stateId
-
-// 7. Move to In Progress
-update_issue({ id: issueId, stateId: inProgressStateId })
+get_issue(issueId)                    → read current stateId
+// If already In Progress or further, skip. Otherwise:
+list_issue_statuses({ teamId })       → find In Progress stateId
+save_issue({ id: issueId, stateId: inProgressId })
 ```
 
-### Deviation comment
+### Create sub-issue
 
 ```
-create_comment({
-  issueId: "ENG-123",
-  body: "**Deviation**: ...\n**Why**: ...\n**Impact**: ...\n**Decision needed**: ..."
-})
+save_issue({ teamId, projectId, parentId: parentIssueId, title, estimate, cycleId })
 ```
 
-### Project update (runtime-discovered)
+### Set a relation
 
 ```
-create_project_update({
-  projectId: "<project-id>",
-  health: "at_risk",
-  body: "Blocker discovered: ... | What's next: ... | Decision needed from: ..."
-})
+save_issue({ id: issueId, relations: [{ type: "blocks", relatedIssueId: "<id>" }] })
+```
+
+### Progress / Blocker / Finding comment
+
+```
+save_comment({ issueId, body: "Redis module merged (ENG-790). Rate limiter now unblocked." })   // Progress
+save_comment({ issueId, body: "**Blocked**: Needs token format from auth team (ENG-456) before proceeding." })   // Blocker
+save_comment({ issueId, body: "**Deviation**: ...\n**Why**: ...\n**Impact**: ...\n**Decision needed**: ..." })  // Finding
 ```
 
 ### Handoff
 
 ```
-// 1. Discover In Review state
-list_issue_statuses(filter: { team: { id: { eq: teamId } } }) → in-review state
+get_issue(issueId)                    → check current state; skip if already In Review+
+list_issue_statuses({ teamId })       → find In Review stateId
+save_issue({ id: issueId, stateId: inReviewId })
+save_comment({ issueId, body: "PR #N: <link>. Landed: ... Deferred: ... Follow-ups: ENG-###" })
+```
 
-// 2. Move issue
-update_issue({ id: issueId, stateId: inReviewStateId })
+### Queue check ("what's on my plate")
 
-// 3. Final comment
-create_comment({ issueId, body: "PR #N open: <link>. Landed: ... Deferred: ..." })
+```
+list_issues({
+  filter: {
+    assignee: { isMe: { eq: true } },
+    state: { type: { in: ["started", "unstarted"] } }
+  }
+})
+```
+
+### Project update
+
+```
+create_project_update({ projectId, health: "at_risk", body: "..." })
+// verify tool name at runtime; fallback: save_comment on flagship issue
 ```
 
 ---
@@ -158,4 +177,4 @@ create_comment({ issueId, body: "PR #N open: <link>. Landed: ... Deferred: ..." 
 | `related` | Contextually related, no ordering constraint |
 | `duplicate` | Duplicate of the related issue |
 
-Pass as `relations: [{ type: "blocks", relatedIssueId: "<id>" }]` in `update_issue`.
+Pass as `relations: [{ type: "blocks", relatedIssueId: "<id>" }]` in `save_issue`.

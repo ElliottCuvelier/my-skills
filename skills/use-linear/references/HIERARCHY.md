@@ -49,8 +49,8 @@ The primary ownership boundary. Issues, labels, cycles, and workflow states are 
 
 - **Scope:** Multi-issue deliverable with a defined end state and usually a ship date.
 - **Create when:** Work spans ≥ 3 issues and has a shared deliverable.
-- **Every non-trivial issue should belong to a project.** An issue without a project is hard to find and easy to forget.
-- **MCP:** `list_projects`, `create_project` (confirm first), `update_project`.
+- **If an issue is orphan:** call `list_projects` and find one whose scope matches the work. If a clear fit exists, attach it. If the work is genuinely self-isolated (one-off fix, no initiative), leave it project-less — don't force-assign a bad-fit project.
+- **MCP:** `list_projects`, `save_project` (confirm first).
 
 ### Issue
 
@@ -128,7 +128,7 @@ Create an initiative (confirm first) when:
 
 | Mistake | Symptom | Fix |
 | --- | --- | --- |
-| Issue in wrong project | Issue completed but project doesn't reflect it | `update_issue(projectId: ...)` before starting |
+| Issue in wrong project | Issue completed but project doesn't reflect it | `save_issue({ id, projectId: correctId })` before starting |
 | Sub-issue nesting > 2 levels | Impossible to navigate; hard to assign | Flatten: promote inner sub-issues to top-level issues with relations |
 | Cycle omitted on create | Issue floats with no sprint ownership | Always `list_cycles` and assign on create when team uses cycles |
 | Project missing target date | Project update health has no timeline context | Set `targetDate` on `create_project` or `update_project` |
