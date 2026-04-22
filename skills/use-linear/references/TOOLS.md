@@ -4,9 +4,9 @@ Intent → tool mapping for the official Linear MCP server. Back to [SKILL.md](.
 
 > **Primary tools:** `save_issue`, `save_comment`, `save_project` — unified upserts that handle both create and update. Prefer these over any older `create_*`/`update_*` variants if both are available.
 >
-> **MCP namespace:** In-session, tools are prefixed by the MCP server name (e.g., `mcp__linear__save_issue`). Check your session's actual tool list — the prefix varies by client configuration. The names below are the short-form; append the prefix when calling.
+> **MCP namespace:** In-session, tools are prefixed by the MCP server name — check the session's actual tool list for the correct prefix (e.g., `mcp__linear-wi__save_issue` or `mcp__linear__save_issue`). The names below are the short-form; append the prefix when calling.
 >
-> **Runtime-discovery rule:** The tool surface evolves. Confirm a tool exists in your session before calling it. If a newer equivalent is available, prefer it.
+> **Parameter style:** All tools use flat scalar params — no nested `filter` object. Reference fields (team, project, state, cycle, assignee, labels) accept either a **name or ID**.
 
 ---
 
@@ -14,39 +14,44 @@ Intent → tool mapping for the official Linear MCP server. Back to [SKILL.md](.
 
 | Intent | Tool | Key params |
 | --- | --- | --- |
-| Create or update an issue | `save_issue` | `id` (omit to create), `teamId`, `title`, `description`, `stateId`, `assigneeId`, `projectId`, `parentId`, `labelIds`, `priority`, `estimate`, `cycleId`, `relations` |
-| Create or update a project | `save_project` | `id` (omit to create), `teamId`, `name`, `description`, `targetDate`, `statusId` |
-| Add or update a comment | `save_comment` | `id` (omit to create), `issueId`, `body` (Markdown) |
+| Create or update an issue | `save_issue` | `id` (omit to create), `team`, `title`, `description`, `state`, `assignee`, `project`, `parentId`, `labels`, `priority`, `estimate`, `cycle`, `milestone`, `dueDate`, `blockedBy`, `blocks`, `relatedTo`, `duplicateOf`, `links` |
+| Create or update a project | `save_project` | `id` (omit to create), `name`, `addTeams`/`setTeams`, `description`, `state`, `priority`, `startDate`, `targetDate`, `summary` |
+| Add or update a comment | `save_comment` | `id` (omit to create), `issueId`, `body` (Markdown), `parentId` (for replies) |
 
 ---
 
-## Reading Tools (confirmed)
+## Reading Tools
 
 ### Querying lists
 
-| Intent | Tool | Key filters / params |
+| Intent | Tool | Key params |
 | --- | --- | --- |
-| Find issues by keyword, team, assignee, status | `list_issues` | `filter.team.key`, `filter.assignee.id`, `filter.assignee.isMe`, `filter.state.type`, `query` |
-| Find projects | `list_projects` | `filter.team.id`, `filter.state` |
+| Find issues by keyword, team, assignee, status | `list_issues` | `team`, `assignee` ("me" for self, "null" for unassigned), `state`, `query`, `project`, `label`, `cycle`, `parentId`, `priority`, `createdAt`, `updatedAt`, `limit` (max 250), `orderBy` |
+| Find projects | `list_projects` | `team`, `state`, `query`, `label`, `initiative`, `member`, `limit` |
 | Find teams in workspace | `list_teams` | — |
 | Find workspace members | `list_users` | — |
-| Find documents attached to a project | `list_documents` | `filter.project.id` |
-| Find active and upcoming cycles | `list_cycles` | `filter.team.id`, `filter.isActive`, `filter.isNext` |
-| Find comments on an issue | `list_comments` | `filter.issue.id` |
-| Find all labels in a team | `list_issue_labels` | `filter.team.id` — **call before writing any label** |
-| Find all workflow states for a team | `list_issue_statuses` | `filter.team.id` — **call before setting state** |
-| Find all project-level labels | `list_project_labels` | `filter.project.id` |
+| Find documents attached to a project or initiative | `list_documents` | `projectId`, `initiativeId`, `query`, `creatorId`, `limit` |
+| Find active / upcoming cycles | `list_cycles` | `teamId` (required), `type`: `current` \| `previous` \| `next` |
+| Find comments on an issue | `list_comments` | `issueId` or nested filters |
+| Find all labels in a team | `list_issue_labels` | `team`, `name` — **call before writing any label** |
+| Find all workflow states for a team | `list_issue_statuses` | `team` (required) — **call before setting state** |
+| Find project-level labels | `list_project_labels` | `projectId` |
+| Find milestones for a project | `list_milestones` | `project` (required — name, ID, or slug) |
+| Find initiatives in workspace | `list_initiatives` | `owner`, `status`, `query`, `parentInitiative`, `limit` |
 
 ### Reading a single object
 
 | Intent | Tool | Required param |
 | --- | --- | --- |
-| Read full issue (description, relations, sub-issues, state) | `get_issue` | `id` — always re-read; never rely on memory |
+| Read full issue (description, relations, sub-issues, state) | `get_issue` | `id` — always re-read; never rely on memory. Pass `includeRelations: true` to include blocking/related/duplicate links. |
 | Read full project detail | `get_project` | `id` |
 | Read team detail | `get_team` | `id` |
 | Read user profile | `get_user` | `id` |
 | Read a document's full content | `get_document` | `id` |
 | Read the definition of a workflow state | `get_issue_status` | `id` |
+| Read a milestone | `get_milestone` | `id` |
+| Read an initiative | `get_initiative` | `id` |
+| List project / initiative status updates | `get_status_updates` | `project` or `initiative` (name/ID); pass `type: "initiative"` for initiatives |
 
 ### Knowledge search
 
@@ -56,35 +61,23 @@ Intent → tool mapping for the official Linear MCP server. Back to [SKILL.md](.
 
 ---
 
-## Creating (legacy / also available)
+## Write Tools (beyond the primary `save_*`)
 
-The `save_*` tools are preferred. If `save_issue` is unavailable, fall back to:
-
-| Intent | Legacy tool |
-| --- | --- |
-| Create an issue | `create_issue` |
-| Update an issue | `update_issue` |
-| Create a comment | `create_comment` |
-| Create a project | `create_project` |
-| Update a project | `update_project` |
-| Create a new label for a team | `create_issue_label` — **only after `list_issue_labels` confirms gap and user confirms** |
-
----
-
-## Tentative / Runtime-Verify (2026-era tools)
-
-Announced in Linear's February 2026 changelog. Verify exact names at runtime before calling.
-
-| Intent | Likely tool name |
-| --- | --- |
-| Create an initiative | `create_initiative` |
-| Update an initiative | `update_initiative` |
-| Post an initiative update | `create_initiative_update` |
-| Post a project update | `create_project_update` — use `health`: `on_track` / `at_risk` / `off_track` |
-| Create a project milestone | `create_project_milestone` |
-| Manage project labels | `create_project_label` / `update_project_label` |
-
-Fallback if `create_project_update` is unavailable: `save_comment` on the project's flagship issue.
+| Intent | Tool | Key params |
+| --- | --- | --- |
+| Post a project status update | `save_status_update` | `project` (name/ID), `health` (`onTrack`/`atRisk`/`offTrack`), `body` (Markdown) |
+| Post an initiative status update | `save_status_update` | `initiative` (name/ID), `type: "initiative"`, `health`, `body` |
+| Create or update a milestone | `save_milestone` | `project` (required), `name` (required when creating), `targetDate`, `description` |
+| Create or update an initiative | `save_initiative` | `name` (required when creating), `description`, `owner`, `status`, `targetDate` |
+| Create a new document | `create_document` | `title` (required), `project` or `issue` (name/ID), `content` (Markdown) |
+| Update an existing document | `update_document` | `id` (required), `title`, `content` |
+| Create a new label for a team | `create_issue_label` | — **only after `list_issue_labels` confirms gap and user confirms** |
+| Delete a comment | `delete_comment` | `id` |
+| Delete a status update | `delete_status_update` | `id` |
+| Add an attachment/link to an issue | `create_attachment` | `issueId`, `url`, `title` |
+| Read an attachment | `get_attachment` | `id` |
+| Delete an attachment | `delete_attachment` | `id` |
+| Extract images from content | `extract_images` | `url` |
 
 ---
 
@@ -93,30 +86,34 @@ Fallback if `create_project_update` is unavailable: `save_comment` on the projec
 ### Start-of-task (full sequence)
 
 ```
-list_teams()                          → pick teamId
-list_projects({ teamId })             → pick projectId
-list_issue_labels({ teamId })         → pick existing labelIds
-list_cycles({ teamId, isActive })     → pick cycleId
+list_teams()                              → pick team
+list_projects({ team })                   → pick project
+list_issue_labels({ team })               → pick existing labels
+list_cycles({ teamId, type: "current" })  → pick cycle
 // Draft → user confirms →
-save_issue({ teamId, projectId, title, description, labelIds, priority, estimate, cycleId })
+save_issue({ team, project, title, description, labels, priority, estimate, cycle })
 // → returns issueId
 
-get_issue(issueId)                    → read current stateId
+get_issue(issueId)                        → read current state
 // If already In Progress or further, skip. Otherwise:
-list_issue_statuses({ teamId })       → find In Progress stateId
-save_issue({ id: issueId, stateId: inProgressId })
+list_issue_statuses({ team })             → find In Progress state name/ID
+save_issue({ id: issueId, state: "In Progress" })
 ```
 
 ### Create sub-issue
 
 ```
-save_issue({ teamId, projectId, parentId: parentIssueId, title, estimate, cycleId })
+save_issue({ team, project, parentId: parentIssueId, title, estimate, cycle })
 ```
 
-### Set a relation
+### Set relations
 
 ```
-save_issue({ id: issueId, relations: [{ type: "blocks", relatedIssueId: "<id>" }] })
+save_issue({ id: issueId, blockedBy: ["ENG-456"] })          // this issue is blocked by ENG-456
+save_issue({ id: issueId, blocks: ["ENG-789"] })             // this issue blocks ENG-789
+save_issue({ id: issueId, relatedTo: ["ENG-100"] })          // contextually related
+// Remove a relation:
+save_issue({ id: issueId, removeBlockedBy: ["ENG-456"] })
 ```
 
 ### Progress / Blocker / Finding comment
@@ -127,54 +124,50 @@ save_comment({ issueId, body: "**Blocked**: Needs token format from auth team (E
 save_comment({ issueId, body: "**Deviation**: ...\n**Why**: ...\n**Impact**: ...\n**Decision needed**: ..." })  // Finding
 ```
 
+### Project status update
+
+```
+save_status_update({ project: "Infrastructure Hardening Q2", health: "atRisk", body: "..." })
+save_status_update({ initiative: "Platform Reliability", type: "initiative", health: "onTrack", body: "..." })
+```
+
 ### Handoff
 
 ```
 get_issue(issueId)                    → check current state; skip if already In Review+
-list_issue_statuses({ teamId })       → find In Review stateId
-save_issue({ id: issueId, stateId: inReviewId })
+list_issue_statuses({ team })         → find In Review state
+save_issue({ id: issueId, state: "In Review" })
 save_comment({ issueId, body: "PR #N: <link>. Landed: ... Deferred: ... Follow-ups: ENG-###" })
 ```
 
 ### Queue check ("what's on my plate")
 
 ```
-list_issues({
-  filter: {
-    assignee: { isMe: { eq: true } },
-    state: { type: { in: ["started", "unstarted"] } }
-  }
-})
-```
-
-### Project update
-
-```
-create_project_update({ projectId, health: "at_risk", body: "..." })
-// verify tool name at runtime; fallback: save_comment on flagship issue
+list_issues({ assignee: "me", state: "started" })    // in progress
+list_issues({ assignee: "me", state: "unstarted" })  // todo / backlog assigned to me
 ```
 
 ---
 
 ## Priority Values
 
-| Value | Meaning |
-| --- | --- |
-| `0` | No priority |
-| `1` | Urgent |
-| `2` | High |
-| `3` | Medium |
-| `4` | Low |
+| Value | Meaning (issues) | Meaning (projects) |
+| --- | --- | --- |
+| `0` | No priority | No priority |
+| `1` | Urgent | Urgent |
+| `2` | High | High |
+| `3` | Normal | Medium |
+| `4` | Low | Low |
 
 ---
 
-## Relation Types
+## Relation Fields on `save_issue`
 
-| Type | Meaning |
-| --- | --- |
-| `blocks` | This issue blocks the related issue |
-| `blocked_by` | This issue is blocked by the related issue |
-| `related` | Contextually related, no ordering constraint |
-| `duplicate` | Duplicate of the related issue |
+| Field | Meaning | Remove with |
+| --- | --- | --- |
+| `blocks` | This issue blocks the listed issues | `removeBlocks` |
+| `blockedBy` | This issue is blocked by the listed issues | `removeBlockedBy` |
+| `relatedTo` | Contextually related, no ordering constraint | `removeRelatedTo` |
+| `duplicateOf` | Duplicate of a single issue (string, not array) | pass `null` |
 
-Pass as `relations: [{ type: "blocks", relatedIssueId: "<id>" }]` in `save_issue`.
+All fields are append-only by default — existing relations are never removed unless you use the corresponding `remove*` field.

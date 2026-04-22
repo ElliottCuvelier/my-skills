@@ -96,9 +96,9 @@ A comment alone is not enough when a deviation **invalidates part of a spec or d
 Read-before-write:
 
 ```
-get_document(id: specDocId)
+get_document({ id: specDocId })
 // edit the specific section that changed
-// save via runtime-discovered update_document tool
+update_document({ id: specDocId, content: "..." })
 ```
 
 If no spec Document exists and the deviation implies a significant architectural decision, create one (confirm with user first). See [DOCUMENTS.md](DOCUMENTS.md).
@@ -114,11 +114,11 @@ Post a project update (in addition to the issue comment) when the deviation affe
 | Internal refactor, no timeline impact | No |
 | API shape change, one issue, no timeline impact | No |
 | Scope grows by ≥ 2 days | Yes — health may change |
-| Hard blocker with unclear resolution timeline | Yes — health → `at_risk` or `off_track` |
+| Hard blocker with unclear resolution timeline | Yes — health → `atRisk` or `offTrack` |
 | Other teams or projects now affected | Yes |
 | Milestone stakeholders expected is delayed | Yes |
 
-Health states (verify enum at runtime): `on_track` / `at_risk` / `off_track`.
+Health states: `onTrack` / `atRisk` / `offTrack` (camelCase).
 
 ---
 

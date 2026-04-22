@@ -11,11 +11,11 @@ The official Linear MCP server is your project-management co-pilot. Use it in pa
 
 | Requirement | Details |
 | --- | --- |
-| MCP server | `https://mcp.linear.app/mcp` (official Linear server) |
+| MCP server | Varies by installation (official: `https://mcp.linear.app/mcp`; community servers also available) |
 | Auth | OAuth 2.1 (interactive flow in Claude Code) or `Authorization: Bearer <token>` header — the token is bound to a Linear user; the authenticated user is the default assignee |
 | Supported clients | Claude Code, Claude Desktop, Cursor, Windsurf, VS Code, Zed, and any MCP-compatible client |
 | Primary tools | `save_issue`, `save_comment`, `save_project` (unified upsert); `list_*` / `get_*` for reading |
-| Tool surface | Evolves — discover available tools at runtime; tools appear namespaced (e.g., `mcp__linear__save_issue`) |
+| Tool surface | Check the session's actual tool list — prefix varies by server (e.g., `mcp__linear-wi__save_issue` or `mcp__linear__save_issue`) |
 
 ## When to Use (and When NOT to)
 
@@ -50,14 +50,14 @@ Follow this protocol for every non-trivial task. It runs in parallel with coding
 1. **Find an existing issue.** Call `list_issues` filtered by keywords/team. If the user named an ID (e.g., `ENG-123`), call `get_issue` directly — re-read from Linear, never rely on memory.
 2. **If no match and task is non-trivial:** draft an issue — title, description, team (`list_teams`), project (`list_projects`), labels (`list_issue_labels`), priority, estimate, cycle (`list_cycles`), parent or relations if applicable. **Present the draft to the user. Wait for confirmation.** Then call `save_issue`.
 3. **Move to In Progress.** First, call `get_issue` to read the current state. If it's already at or past In Progress, skip the transition — never regress status. If it's still in Backlog/Todo, discover the In Progress state via `list_issue_statuses` and call `save_issue`. Never hard-code status names or UUIDs.
-4. **Capture durable spec.** If the task has a written spec or design that will be referenced repeatedly, create a Linear Document (runtime-discovered create tool) or update the issue description. Do not bury specs in comments.
+4. **Capture durable spec.** If the task has a written spec or design that will be referenced repeatedly, create a Linear Document (`create_document`) or update the issue description. Do not bury specs in comments.
 
 ### (b) While working — continuously
 
 - **Sub-issues.** When a subtask is ≥ ~30 min or belongs to a different layer/person, create it as a sub-issue via `save_issue` with `parentId`. Decompose proactively.
 - **Relations.** The moment a dependency surfaces, set it: `blocks`, `blocked_by`, or `related` via `save_issue`. Don't let blockers sit silent.
 - **Estimate / priority.** If a field is **unset**, set it. If already set and reality diverges ≥ ~50%, **offer the update to the user** — don't silently overwrite.
-- **Post project updates.** At meaningful checkpoints, call the runtime-discovered `create_project_update` on the parent project. Checkpoints: a milestone lands, a blocker is discovered, scope or timeline materially shifts, a batch of sibling issues completes, or health changes (on-track → at-risk → off-track). Each update names the health state, what moved, what's next, decisions needed. Not on cadence — events only. See [references/WORKFLOW.md](references/WORKFLOW.md).
+- **Post project updates.** At meaningful checkpoints, call `save_status_update` on the parent project. Checkpoints: a milestone lands, a blocker is discovered, scope or timeline materially shifts, a batch of sibling issues completes, or health changes (`onTrack` → `atRisk` → `offTrack`). Each update names the health state, what moved, what's next, decisions needed. Not on cadence — events only. See [references/WORKFLOW.md](references/WORKFLOW.md).
 - **Comments — three types only.** Use `save_comment` for exactly three things:
   - **Progress**: a material step completed (not every commit). One sentence.
   - **Blocker**: something preventing forward motion. State what + what's needed to unblock.
@@ -112,7 +112,8 @@ Linear state changes constantly. Before reporting or acting on issue status, ass
 
 ```
 get_issue(id: "ENG-123")     // current state, not cached state
-list_issues(filter: { assignee: { isMe: { eq: true } }, state: { type: { in: ["started", "unstarted"] } } })
+list_issues({ assignee: "me", state: "started" })    // started work
+list_issues({ assignee: "me", state: "unstarted" })  // todo / backlog assigned to me
 // for "what's on my plate" queries
 ```
 
@@ -200,9 +201,9 @@ Full model with promotion rules in [references/HIERARCHY.md](references/HIERARCH
 | Estimate | Set on create if unset; if already set and diverges ≥ ~50%, offer the change | `save_issue` |
 | Cycle | Assign on create if team uses cycles and field is unset; offer change if already set | `list_cycles` → `save_issue` |
 | Project | If orphan, search for a fit; don't force; if self-isolated, leave project-less | `list_projects` / `save_project` (confirm first) |
-| Initiative | Quarter/half-scale strategic grouping; read-mostly; create only on explicit ask | runtime-discovered tools |
-| **Project Update** | While project is in progress — at milestone, blocker, scope shift, health change. Not on cadence. | runtime-discovered `create_project_update`; fallback: comment on flagship issue |
-| Project milestone | Split a long project into explicit gates | runtime-discovered (2026-era) |
+| Initiative | Quarter/half-scale strategic grouping; read-mostly; create only on explicit ask | `list_initiatives` / `save_initiative` (confirm first) |
+| **Project Update** | While project is in progress — at milestone, blocker, scope shift, health change. Not on cadence. | `save_status_update` (pass `project` name/ID; `health`: `onTrack`/`atRisk`/`offTrack`) |
+| Project milestone | Split a long project into explicit gates | `save_milestone` (pass `project` name/ID, `name`; confirm first) |
 | Document | Durable knowledge: spec, RFC, ADR, runbook, onboarding | `list_documents` → `get_document` → update existing or create; never fork |
 | Comment | Progress milestone, blocker, or finding (deviation) tied to one issue's timeline | `save_comment` |
 
@@ -223,9 +224,7 @@ Full templates and examples in [references/GIT.md](references/GIT.md).
 
 ## Tool Discovery
 
-The primary tools are `save_issue` (create or update), `save_comment`, and `save_project`. These replace the older `create_issue`/`update_issue`/`create_comment`/`create_project`/`update_project` split — if both forms are available, prefer `save_*`. In-session, tools are namespaced by the MCP server (e.g., `mcp__linear__save_issue`) — check the actual tool list before calling.
-
-For 2026-era tools (initiatives, project milestones, project updates, project labels), verify the exact name at runtime.
+The primary tools are `save_issue` (create or update), `save_comment`, and `save_project`. Additional write tools — `save_status_update`, `save_milestone`, `save_initiative`, `create_document`, `update_document` — follow the same `save_*` / `create_*` pattern. In-session, tools are namespaced by the MCP server — check the actual tool list for the correct prefix (e.g., `mcp__linear-wi__save_issue`).
 
 ## Anti-Patterns (CRITICAL)
 

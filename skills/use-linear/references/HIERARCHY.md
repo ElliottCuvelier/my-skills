@@ -12,7 +12,7 @@ Workspace
     │
     ├── Initiative  (strategy-level grouping; quarter / half-year scope)
     │   └── Project  (multi-issue deliverable with a ship date)
-    │       ├── Project Updates  (health posts: on_track / at_risk / off_track)
+    │       ├── Project Updates  (health posts: onTrack / atRisk / offTrack)
     │       ├── Project Milestones  (named progress gates)
     │       └── Issue  (unit of tracked work)
     │           ├── Sub-issue  (Issue with parentId set — same fields, same API)
@@ -43,7 +43,7 @@ The primary ownership boundary. Issues, labels, cycles, and workflow states are 
 - **Scope:** Multi-project; quarter/half-year strategic bet.
 - **Create when:** Multiple projects share a strategic theme and stakeholders need a single place to track progress across all of them.
 - **Skip when:** You have a single project or the grouping is just for convenience. Projects can stand alone.
-- **MCP:** Use runtime-discovered initiative tools (see [TOOLS.md](TOOLS.md) tentative section).
+- **MCP:** `list_initiatives`, `get_initiative`, `save_initiative` (confirm before creating). See [TOOLS.md](TOOLS.md).
 
 ### Project
 
@@ -56,7 +56,7 @@ The primary ownership boundary. Issues, labels, cycles, and workflow states are 
 
 - **Scope:** A single unit of trackable work. The fundamental object.
 - **A good issue has:** action-oriented title, acceptance criteria in description, estimate, priority, cycle assignment, correct state, and at least one label.
-- **MCP:** `create_issue`, `update_issue`, `get_issue`, `list_issues`.
+- **MCP:** `save_issue` (create or update), `get_issue`, `list_issues`.
 
 ### Sub-issue (Issue with `parentId`)
 
@@ -70,19 +70,19 @@ The primary ownership boundary. Issues, labels, cycles, and workflow states are 
   - Work is <15 min and inline to the parent PR
   - It would only exist for a few hours (just do it and don't track it)
 - **Depth:** Aim for max 2 levels (issue → sub-issue). A sub-sub-issue that has sub-sub-sub-issues is a sign the parent issue is too large and should be promoted to a project.
-- **MCP:** Same as Issue — `create_issue` with `parentId`.
+- **MCP:** Same as Issue — `save_issue` with `parentId`.
 
 ### Document
 
 - **Scope:** Durable knowledge attached to a project or issue.
 - **Not a comment.** A comment is ephemeral and timeline-ordered. A document is searchable, updateable, and authoritative.
-- **MCP:** `list_documents`, `get_document`, runtime-discovered create/update.
+- **MCP:** `list_documents`, `get_document`, `create_document`, `update_document`.
 - See [DOCUMENTS.md](DOCUMENTS.md) for shapes and the read-before-write protocol.
 
 ### Cycle
 
 - **Scope:** Time-boxed sprint-style commitment. Orthogonal to project hierarchy — an issue belongs to a project AND a cycle.
-- **Assign on create** if the team uses cycles. Discover via `list_cycles` (filter by `isActive` or `isNext`).
+- **Assign on create** if the team uses cycles. Discover via `list_cycles({ teamId, type: "current" })` or `type: "next"`.
 - **Do not invent cycles.** Only assign to existing cycles.
 
 ### Project Update
@@ -90,7 +90,7 @@ The primary ownership boundary. Issues, labels, cycles, and workflow states are 
 - **Scope:** A health post on a Project; visible to all stakeholders.
 - **Post at:** milestone landings, blocker discoveries, health changes, scope/timeline shifts, sibling-issue batch completions.
 - **Do not post on cadence.** Event-driven only.
-- **MCP:** Runtime-discovered `create_project_update`.
+- **MCP:** `save_status_update` (pass `project` name/ID, `health`: `onTrack`/`atRisk`/`offTrack`, `body`).
 
 ### Comment
 
@@ -128,8 +128,8 @@ Create an initiative (confirm first) when:
 
 | Mistake | Symptom | Fix |
 | --- | --- | --- |
-| Issue in wrong project | Issue completed but project doesn't reflect it | `save_issue({ id, projectId: correctId })` before starting |
+| Issue in wrong project | Issue completed but project doesn't reflect it | `save_issue({ id, project: correctProject })` before starting |
 | Sub-issue nesting > 2 levels | Impossible to navigate; hard to assign | Flatten: promote inner sub-issues to top-level issues with relations |
 | Cycle omitted on create | Issue floats with no sprint ownership | Always `list_cycles` and assign on create when team uses cycles |
-| Project missing target date | Project update health has no timeline context | Set `targetDate` on `create_project` or `update_project` |
+| Project missing target date | Project update health has no timeline context | Set `targetDate` on `save_project` |
 | Initiative created for a single project | Over-engineering; nobody maintains it | Projects can stand alone; initiatives are for multi-project themes |

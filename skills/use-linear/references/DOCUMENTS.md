@@ -30,13 +30,15 @@ Never create a new Document without checking whether one already exists. Forking
 
 ```
 // 1. Search for existing documents on the project
-list_documents(filter: { project: { id: { eq: "<project-id>" } } })
+list_documents({ projectId: "<project-id>" })
 
 // 2. If a relevant document exists, read it
-get_document(id: "<doc-id>")
+get_document({ id: "<doc-id>" })
 
-// 3a. If found and stale → update it (runtime-discovered update_document tool)
+// 3a. If found and stale → update it
+update_document({ id: "<doc-id>", content: "..." })
 // 3b. If not found → draft + confirm with user → create it
+create_document({ project: "<project-name-or-id>", title: "Spec: <feature>", content: "..." })
 ```
 
 ---

@@ -11,13 +11,13 @@ Full expansion of the parallel-progress protocol from [SKILL.md](../SKILL.md). R
 **1. Search first — re-read from Linear, never from memory.**
 
 ```
-list_issues(filter: { team: { key: { eq: "ENG" } }, query: "auth token refresh" }, first: 10)
+list_issues({ team: "ENG", query: "auth token refresh", limit: 10 })
 ```
 
 If the user provided an issue ID directly:
 
 ```
-get_issue(id: "ENG-123")
+get_issue({ id: "ENG-123" })
 ```
 
 **2. Draft and confirm before creating.**
@@ -29,22 +29,22 @@ If no match and the task is non-trivial, build a draft and present it to the use
 - **Team** — resolved via `list_teams`
 - **Project** — resolved via `list_projects`; search for a scope fit. If genuinely self-isolated, leave project-less.
 - **Labels** — resolved via `list_issue_labels`; never invented
-- **Priority** — 0 (none), 1 (urgent), 2 (high), 3 (medium), 4 (low)
+- **Priority** — 0 (none), 1 (urgent), 2 (high), 3 (normal), 4 (low)
 - **Estimate** — set on create (check existing issues for the team's scale convention)
-- **Cycle** — assign to the active cycle if the team uses cycles (`list_cycles`)
+- **Cycle** — assign to the active cycle if the team uses cycles (`list_cycles({ teamId, type: "current" })`)
 - **Parent** — `parentId` if this is a sub-issue
-- **Relations** — if this blocks or is blocked by another issue
+- **Relations** — if this blocks or is blocked by another issue (`blockedBy`, `blocks`)
 
 Wait for the user to confirm before calling `save_issue`.
 
 **3. Move to In Progress — check current state first.**
 
 ```
-get_issue(issueId)    // read current state
-// If stateType is already "started", "completed", or "cancelled" → skip
-// If stateType is "unstarted" or "backlog":
-list_issue_statuses(filter: { team: { id: { eq: teamId } } })  // find In Progress id
-save_issue({ id: issueId, stateId: inProgressId })
+get_issue({ id: issueId })
+// Read the state from the returned object. If already "started", "completed", or "cancelled" → skip.
+// If "unstarted" or "backlog":
+list_issue_statuses({ team })  // find the In Progress state name or ID
+save_issue({ id: issueId, state: "In Progress" })
 ```
 
 Never regress. If the user already moved the issue forward, leave it where it is.
@@ -52,11 +52,11 @@ Never regress. If the user already moved the issue forward, leave it where it is
 **4. Surface or create the spec Document.**
 
 ```
-list_documents(filter: { project: { id: { eq: projectId } } })
-get_document(id: docId)   // if found — read before writing
+list_documents({ projectId })
+get_document({ id: docId })   // if found — read before writing
 
 // If not found and a spec exists, confirm with user then:
-create_document(projectId, title: "Spec: <feature>", content: "...")  // runtime-discovered tool
+create_document({ project: projectId, title: "Spec: <feature>", content: "..." })
 ```
 
 See [DOCUMENTS.md](DOCUMENTS.md) for document shapes.
@@ -69,20 +69,20 @@ See [DOCUMENTS.md](DOCUMENTS.md) for document shapes.
 
 ```
 save_issue({
-  teamId,
-  projectId,
+  team,
+  project,
   parentId: parentIssueId,
   title: "Add migration for sessions table",
   description: "...",
   estimate: 2,
-  cycleId: currentCycleId
+  cycle: currentCycleId
 })
 ```
 
 **Set relations when dependencies surface.**
 
 ```
-save_issue({ id: blockingIssueId, relations: [{ type: "blocks", relatedIssueId: blockedIssueId }] })
+save_issue({ id: blockedIssueId, blockedBy: [blockingIssueId] })
 ```
 
 **Update estimate / priority — offer first if already set.**
@@ -95,8 +95,8 @@ Then: `save_issue({ id: issueId, estimate: 8 })` on confirmation.
 **Post project updates at meaningful checkpoints.**
 
 ```
-create_project_update({ projectId, health: "at_risk", body: "..." })
-// verify tool name at runtime; fallback: save_comment on flagship issue
+save_status_update({ project: projectId, health: "atRisk", body: "..." })
+// For initiative updates: save_status_update({ initiative: initiativeId, type: "initiative", health: "onTrack", body: "..." })
 ```
 
 Triggers: milestone lands, blocker discovered, scope/timeline shifts, health changes, sibling-issue batch completes.
@@ -140,10 +140,10 @@ If the deviation invalidates a spec Document, update it immediately — a commen
 **1. Check state before transitioning.**
 
 ```
-get_issue(issueId)
+get_issue({ id: issueId })
 // if already In Review or beyond → skip
-list_issue_statuses(filter: { team: { id: { eq: teamId } } })   // find In Review state
-save_issue({ id: issueId, stateId: inReviewId })
+list_issue_statuses({ team })   // find In Review state
+save_issue({ id: issueId, state: "In Review" })
 ```
 
 **2. Git artifacts reference the issue.**
@@ -170,7 +170,7 @@ save_comment({
 ### Step 1 — Search
 
 ```
-list_issues(filter: { query: "rate limit search" })   // → no matches
+list_issues({ query: "rate limit search" })   // → no matches
 ```
 
 ### Step 2 — Draft + confirm
@@ -189,14 +189,14 @@ Proposed issue:
   Cycle: Sprint 14
 ```
 
-User approves → `save_issue(...)` → returns `ENG-789`.
+User approves → `save_issue({ team: "ENG", project: "...", title: "...", ... })` → returns `ENG-789`.
 
 ### Step 3 — Move to In Progress (check first)
 
 ```
-get_issue("ENG-789")    // stateType: "backlog" → proceed
-list_issue_statuses(teamId)   // find In Progress
-save_issue({ id: "ENG-789", stateId: inProgressId })
+get_issue({ id: "ENG-789" })    // state is backlog → proceed
+list_issue_statuses({ team: "ENG" })   // find In Progress
+save_issue({ id: "ENG-789", state: "In Progress" })
 ```
 
 ### Step 4 — Sub-issue + relation discovered
@@ -204,17 +204,17 @@ save_issue({ id: "ENG-789", stateId: inProgressId })
 Redis isn't provisioned → sub-issue:
 
 ```
-save_issue({ parentId: "ENG-789", title: "Add Redis module to infra stack", estimate: 3, cycleId })
+save_issue({ team: "ENG", project: "...", parentId: "ENG-789", title: "Add Redis module to infra stack", estimate: 3, cycle: "Sprint 14" })
 // → ENG-790
-save_issue({ id: "ENG-789", relations: [{ type: "blocked_by", relatedIssueId: "ENG-790" }] })
+save_issue({ id: "ENG-789", blockedBy: ["ENG-790"] })
 ```
 
 ### Step 5 — Milestone lands → project update
 
 ```
-create_project_update({
-  projectId: infraProjectId,
-  health: "on_track",
+save_status_update({
+  project: "Infrastructure Hardening Q2",
+  health: "onTrack",
   body: "Redis module (ENG-790) complete and merged. ENG-789 now unblocked. On track for Sprint 14."
 })
 ```
@@ -231,15 +231,18 @@ save_comment({
   body: "**Deviation**: Middleware refactor required before per-route rate limiter injection.\n**Why**: Pipeline applies middleware globally only; per-route config requires route-level injection.\n**Impact**: Scope grows ~2 days.\n**Decision needed**: Yes — approve scope extension or descope per-route config to follow-up?"
 })
 
-create_project_update({ projectId: infraProjectId, health: "at_risk",
-  body: "Middleware refactor prerequisite discovered. Adds ~2 days. Decision needed from @pm on scope." })
+save_status_update({
+  project: "Infrastructure Hardening Q2",
+  health: "atRisk",
+  body: "Middleware refactor prerequisite discovered. Adds ~2 days. Decision needed from @pm on scope."
+})
 ```
 
 ### Step 7 — PR + handoff
 
 ```
-get_issue("ENG-789")    // check state before transitioning
-save_issue({ id: "ENG-789", stateId: inReviewId })
+get_issue({ id: "ENG-789" })    // check state before transitioning
+save_issue({ id: "ENG-789", state: "In Review" })
 save_comment({ issueId: "ENG-789", body: "PR #88 open: https://github.com/org/repo/pull/88. Landed: token-bucket, Redis, middleware refactor (minimal scope). Deferred: per-route config → ENG-791." })
 ```
 
@@ -247,7 +250,7 @@ save_comment({ issueId: "ENG-789", body: "PR #88 open: https://github.com/org/re
 
 ## Edge Cases
 
-**Issue already In Progress when task starts.** `get_issue` shows state type "started" → skip step (a.3) entirely.
+**Issue already In Progress when task starts.** `get_issue` shows the state name or type as "started" → skip step (a.3) entirely.
 
 **Project update tool unavailable.** `save_comment` on the project's flagship issue as fallback. Note it's a project-level update in the comment.
 
@@ -255,4 +258,4 @@ save_comment({ issueId: "ENG-789", body: "PR #88 open: https://github.com/org/re
 
 **Work spans multiple issues.** Move all to In Progress. Link them. Reference all IDs in commits and PR body.
 
-**Issue in wrong project.** `save_issue({ id, projectId: correctId })` before starting work — don't operate against a miscategorised issue.
+**Issue in wrong project.** `save_issue({ id, project: correctProject })` before starting work — don't operate against a miscategorised issue.

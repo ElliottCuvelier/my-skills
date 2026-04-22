@@ -46,7 +46,7 @@ Present this every time, even for small plans. The user decides; the agent doesn
 - Use `list_projects` to find a project whose scope fits
 - If none fits and the work is self-isolated, create issues project-less
 - If the plan implies a new project-scale initiative, offer to `save_project` first (confirm separately)
-- Always resolve `teamId` via `list_teams` before creating
+- Always resolve the team (name or ID) via `list_teams` before creating
 
 ### Labels, estimates, cycles
 
@@ -93,21 +93,21 @@ Issue: Implement user sessions feature
 **On "Start working":**
 
 ```
-save_issue({ teamId, projectId, title: "Implement user sessions feature", ... })     // → ENG-100 (parent)
-save_issue({ parentId: "ENG-100", title: "Add sessions table migration", ... })      // → ENG-101
-save_issue({ parentId: "ENG-100", title: "Add index on user_id", ... })              // → ENG-102
-save_issue({ parentId: "ENG-100", title: "POST /sessions endpoint", ... })           // → ENG-103
-save_issue({ id: "ENG-103", relations: [{ type: "blocked_by", relatedIssueId: "ENG-101" }] })
-save_issue({ parentId: "ENG-100", title: "DELETE /sessions/:id endpoint", ... })     // → ENG-104
-save_issue({ id: "ENG-104", relations: [{ type: "blocked_by", relatedIssueId: "ENG-101" }] })
-save_issue({ parentId: "ENG-100", title: "Session list component", ... })            // → ENG-105
-save_issue({ id: "ENG-105", relations: [{ type: "blocked_by", relatedIssueId: "ENG-103" }] })
-save_issue({ parentId: "ENG-100", title: "Logout flow", ... })                       // → ENG-106
-save_issue({ id: "ENG-106", relations: [{ type: "blocked_by", relatedIssueId: "ENG-103" }] })
+save_issue({ team, project, title: "Implement user sessions feature", ... })     // → ENG-100 (parent)
+save_issue({ team, project, parentId: "ENG-100", title: "Add sessions table migration", ... })      // → ENG-101
+save_issue({ team, project, parentId: "ENG-100", title: "Add index on user_id", ... })              // → ENG-102
+save_issue({ team, project, parentId: "ENG-100", title: "POST /sessions endpoint", ... })           // → ENG-103
+save_issue({ id: "ENG-103", blockedBy: ["ENG-101"] })
+save_issue({ team, project, parentId: "ENG-100", title: "DELETE /sessions/:id endpoint", ... })     // → ENG-104
+save_issue({ id: "ENG-104", blockedBy: ["ENG-101"] })
+save_issue({ team, project, parentId: "ENG-100", title: "Session list component", ... })            // → ENG-105
+save_issue({ id: "ENG-105", blockedBy: ["ENG-103"] })
+save_issue({ team, project, parentId: "ENG-100", title: "Logout flow", ... })                       // → ENG-106
+save_issue({ id: "ENG-106", blockedBy: ["ENG-103"] })
 
 // Move first issue to In Progress
-get_issue("ENG-101")    // check state
-save_issue({ id: "ENG-101", stateId: inProgressId, assigneeId: viewerUserId })
+get_issue({ id: "ENG-101" })    // check state
+save_issue({ id: "ENG-101", state: "In Progress", assignee: "me" })
 ```
 
 ---
