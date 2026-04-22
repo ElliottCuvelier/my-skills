@@ -126,7 +126,7 @@ save_issue({ id: "ENG-123", removeBlockedBy: ["ENG-456"] }) // remove a blocker
 save_comment({ issueId: "ENG-123", body: "..." })
 ```
 
-**Note:** Tools appear namespaced in-session — check the actual tool list for the correct prefix (e.g., `mcp__linear-wi__save_issue`).
+**Note:** Tools appear namespaced in-session by the server's configured name — check the actual tool list for the correct prefix (e.g., `mcp__linear__save_issue` if the server is named "linear").
 
 ---
 

@@ -224,7 +224,7 @@ Full templates and examples in [references/GIT.md](references/GIT.md).
 
 ## Tool Discovery
 
-The primary tools are `save_issue` (create or update), `save_comment`, and `save_project`. Additional write tools — `save_status_update`, `save_milestone`, `save_initiative`, `create_document`, `update_document` — follow the same `save_*` / `create_*` pattern. In-session, tools are namespaced by the MCP server — check the actual tool list for the correct prefix (e.g., `mcp__linear-wi__save_issue`).
+The primary tools are `save_issue` (create or update), `save_comment`, and `save_project`. Additional write tools — `save_status_update`, `save_milestone`, `save_initiative`, `create_document`, `update_document` — follow the same `save_*` / `create_*` pattern. In-session, tools are namespaced by whatever name the MCP server was configured with — check the actual tool list for the correct prefix (e.g., `mcp__linear__save_issue` if named "linear", `mcp__linear-wi__save_issue` if named "linear-wi").
 
 ## Anti-Patterns (CRITICAL)
 
