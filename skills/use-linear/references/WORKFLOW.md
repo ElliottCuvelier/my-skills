@@ -8,11 +8,16 @@ Full expansion of the parallel-progress protocol from [SKILL.md](../SKILL.md). R
 
 ### (a) At task start
 
-**1. Search first — re-read from Linear, never from memory.**
+**0. Session bootstrap (before any `list_*`).**
 
-```
-list_issues({ team: "ENG", query: "auth token refresh", limit: 10 })
-```
+1. Read `.agents/use-linear/context.yaml` if it exists (see [CONTEXT.md](CONTEXT.md)).
+2. From the **repository root**, run:
+   ```bash
+   python skills/use-linear/scripts/bootstrap.py
+   ```
+3. Parse pipe-delimited sections (`## issues`, `## states`, `## projects`, `## cycles`, `## git`) per [SKILL.md](../SKILL.md) Session Bootstrap.
+
+**1. Resolve the issue — re-read from Linear, never from memory.**
 
 If the user provided an issue ID directly:
 
@@ -20,18 +25,26 @@ If the user provided an issue ID directly:
 get_issue({ id: "ENG-123" })
 ```
 
+Otherwise prefer, in order: IDs from bootstrap `## git` (`linear_trailer`, `issue_id_hint`); a **started** row in `## issues`; then a single narrow MCP search:
+
+```
+list_issues({ assignee: "me", state: "started", limit: 15 })
+```
+
+Only broaden (keywords / team) if still no candidate.
+
 **2. Draft and confirm before creating.**
 
 If no match and the task is non-trivial, build a draft and present it to the user before calling `save_issue`. The draft should include:
 
 - **Title** — action-oriented, ≤60 chars
 - **Description** — what needs to happen and why; acceptance criteria if applicable
-- **Team** — resolved via `list_teams`
-- **Project** — resolved via `list_projects`; search for a scope fit. If genuinely self-isolated, leave project-less.
-- **Labels** — resolved via `list_issue_labels`; never invented
+- **Team** — from `context.yaml` `team` or bootstrap `## cycles` / `## states` keys; else `list_teams` once
+- **Project** — from context `projects` or bootstrap `## projects`; else `list_projects` just-in-time for a scope fit. If genuinely self-isolated, leave project-less.
+- **Labels** — from context `labels`; else `list_issue_labels` once before save; never invented
 - **Priority** — 0 (none), 1 (urgent), 2 (high), 3 (normal), 4 (low)
 - **Estimate** — set on create (check existing issues for the team's scale convention)
-- **Cycle** — assign to the active cycle if the team uses cycles (`list_cycles({ teamId, type: "current" })`)
+- **Cycle** — assign to the active cycle if the team uses cycles (bootstrap `## cycles` row for that team, or `list_cycles({ teamId, type: "current" })` just-in-time)
 - **Parent** — `parentId` if this is a sub-issue
 - **Relations** — if this blocks or is blocked by another issue (`blockedBy`, `blocks`)
 
@@ -43,7 +56,8 @@ Wait for the user to confirm before calling `save_issue`.
 get_issue({ id: issueId })
 // Read the state from the returned object. If already "started", "completed", or "cancelled" → skip.
 // If "unstarted" or "backlog":
-list_issue_statuses({ team })  // find the In Progress state name or ID
+// Prefer bootstrap ## states: pick the row where state_type is "started" and state_name is the team's In Progress label.
+list_issue_statuses({ team })  // only if bootstrap states are ambiguous
 save_issue({ id: issueId, state: "In Progress" })
 ```
 
@@ -88,6 +102,7 @@ save_issue({ id: blockedIssueId, blockedBy: [blockingIssueId] })
 **Update estimate / priority — offer first if already set.**
 
 If the field is unset, set it directly. If already set and reality diverges ≥ ~50%, offer:
+
 > "Estimate is currently 3 points but this looks closer to 8 — update it?"
 
 Then: `save_issue({ id: issueId, estimate: 8 })` on confirmation.
@@ -167,10 +182,11 @@ save_comment({
 
 **Scenario:** User says "implement rate limiting on the search endpoint." No issue exists.
 
-### Step 1 — Search
+### Step 1 — Bootstrap, then search if needed
 
 ```
-list_issues({ query: "rate limit search" })   // → no matches
+python skills/use-linear/scripts/bootstrap.py   // scan ## issues + ## git for an existing match
+list_issues({ query: "rate limit search", limit: 10 })   // only if bootstrap did not surface a fit → no matches
 ```
 
 ### Step 2 — Draft + confirm
@@ -195,6 +211,7 @@ User approves → `save_issue({ team: "ENG", project: "...", title: "...", ... }
 
 ```
 get_issue({ id: "ENG-789" })    // state is backlog → proceed
+// Prefer bootstrap ## states for ENG → In Progress row; else:
 list_issue_statuses({ team: "ENG" })   // find In Progress
 save_issue({ id: "ENG-789", state: "In Progress" })
 ```

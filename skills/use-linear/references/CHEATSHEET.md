@@ -4,12 +4,25 @@ One-screen quick reference. Back to [SKILL.md](../SKILL.md).
 
 ---
 
+## Session bootstrap (once per task, before `list_*`)
+
+From **repo root**:
+
+```bash
+python skills/use-linear/scripts/bootstrap.py
+```
+
+Read `.agents/use-linear/context.yaml` if present ([CONTEXT.md](CONTEXT.md)). Parse pipe rows under `## issues`, `## states`, `## projects`, `## cycles`, `## git`. Use `list_teams` / `list_projects` / `list_issue_labels` / `list_issue_statuses` / `list_cycles` **only just-in-time** before a `save_*` when something is missing from context + snapshot.
+
+---
+
 ## Task-Start Checklist
 
 Before writing a single line of code:
 
-- [ ] **Search** — `list_issues({ query: "..." })` — is there already an issue?
-- [ ] **Draft + confirm** — title, description, team, project (find a fit; leave project-less if none), labels (from `list_issue_labels`), priority, estimate, cycle (from `list_cycles`)
+- [ ] **Bootstrap** — `context.yaml` + `python skills/use-linear/scripts/bootstrap.py` (if script prints `# bootstrap: …`, fall back to MCP discovery)
+- [ ] **Resolve issue** — user ID / git hints / `## issues` started row → `get_issue`; else narrow `list_issues({ assignee: "me", state: "started" })`
+- [ ] **Draft + confirm** — title, description, team, project, labels, priority, estimate, cycle (prefer context + snapshot; `list_*` only to fill gaps)
 - [ ] **Create** — `save_issue(...)` after user confirms
 - [ ] **Check current state** — `get_issue({ id })` — already In Progress? skip transition
 - [ ] **Move state** — `list_issue_statuses({ team })` → discover In Progress name → `save_issue({ id, state: "In Progress" })`
@@ -19,12 +32,12 @@ Before writing a single line of code:
 
 ## State Transition Checklist
 
-| Moment | Action |
-| --- | --- |
-| Task starts | `get_issue` → if Backlog/Todo: `save_issue({ state: "In Progress" })` |
-| PR opened | `get_issue` → if not yet In Review: `save_issue({ state: "In Review" })` |
-| PR merged | `save_issue({ state: "Done" })` (only if no further work) |
-| Blocked | Set `blockedBy` relation; note in Blocker comment |
+| Moment      | Action                                                                   |
+| ----------- | ------------------------------------------------------------------------ |
+| Task starts | `get_issue` → if Backlog/Todo: `save_issue({ state: "In Progress" })`    |
+| PR opened   | `get_issue` → if not yet In Review: `save_issue({ state: "In Review" })` |
+| PR merged   | `save_issue({ state: "Done" })` (only if no further work)                |
+| Blocked     | Set `blockedBy` relation; note in Blocker comment                        |
 
 **Always `get_issue` before transitioning — never regress status.**
 
@@ -32,12 +45,12 @@ Before writing a single line of code:
 
 ## Comment Quick Reference
 
-| Type | When | Format |
-| --- | --- | --- |
-| **Progress** | Material step completed (not every commit) | One sentence |
-| **Blocker** | Something preventing motion | What + what's needed to unblock |
-| **Finding** | Scope creep, bug, deviation from spec | Deviation template |
-| ~~Starting work~~ | Never | Status change says it |
+| Type              | When                                       | Format                          |
+| ----------------- | ------------------------------------------ | ------------------------------- |
+| **Progress**      | Material step completed (not every commit) | One sentence                    |
+| **Blocker**       | Something preventing motion                | What + what's needed to unblock |
+| **Finding**       | Scope creep, bug, deviation from spec      | Deviation template              |
+| ~~Starting work~~ | Never                                      | Status change says it           |
 
 ```
 // Progress
@@ -84,6 +97,7 @@ save_status_update({ project: "Project Name", health: "atRisk", body: "..." })
 After any multi-step plan, close with:
 
 > **Translate to Linear?**
+>
 > - **Start working** — create issues, assign, move first to In Progress, begin
 > - **Archive for team** — create in Backlog, unassigned
 > - **Neither**
@@ -132,20 +146,20 @@ save_comment({ issueId: "ENG-123", body: "..." })
 
 ## Priority Reference
 
-| Value | Issues | Projects |
-| --- | --- | --- |
-| 0 | No priority | No priority |
-| 1 | Urgent | Urgent |
-| 2 | High | High |
-| 3 | Normal | Medium |
-| 4 | Low | Low |
+| Value | Issues      | Projects    |
+| ----- | ----------- | ----------- |
+| 0     | No priority | No priority |
+| 1     | Urgent      | Urgent      |
+| 2     | High        | High        |
+| 3     | Normal      | Medium      |
+| 4     | Low         | Low         |
 
 ---
 
 ## Estimate / Priority / Cycle Rule
 
-| Situation | Action |
-| --- | --- |
-| Field is unset on create or existing issue | Set it |
-| Field is already set, no change needed | Leave it |
+| Situation                                     | Action                             |
+| --------------------------------------------- | ---------------------------------- |
+| Field is unset on create or existing issue    | Set it                             |
+| Field is already set, no change needed        | Leave it                           |
 | Field is already set, reality diverges ≥ ~50% | Offer the change to the user first |
