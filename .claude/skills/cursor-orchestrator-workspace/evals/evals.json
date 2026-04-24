@@ -1,0 +1,45 @@
+{
+  "skill_name": "cursor-orchestrator",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I'm in Plan Mode on Claude Opus 4.7 drafting a plan for a small CRUD API. I don't want to pay Opus rates for the actual implementation — I'd rather have a cheaper model like Composer do the file edits. How do I set that up in this project (which doesn't have anything installed yet)?",
+      "expected_output": "The agent detects first-use (no marker file exists), explains the 7-question setup interview, and conducts the interview via AskQuestion before generating any files. After the interview it invokes scripts/setup.py with the answers as JSON, reports the generated files, and explains the per-plan tier-selection flow plus the /orchestrate command.",
+      "expectations": [
+        "The skill detects first-use by checking for the marker file `.cursor-orchestrator-installed` at both project and user-wide scopes.",
+        "The agent announces that first-use setup is required before generating any files.",
+        "The agent runs the 7-question setup interview using AskQuestion (scope, tiers, default tier, verifier, rule, commands, max_mode).",
+        "After the interview, the agent invokes `python scripts/setup.py --answers <json>` with a valid answers payload.",
+        "The agent explains the per-plan tier question that will be asked before finalizing plans.",
+        "The agent surfaces the Build-button caveat — native Build runs on the picker model; /orchestrate is what dispatches to the configured tier.",
+        "The agent does NOT write agent/rule files directly — it delegates to setup.py so the SHA-hash-tracked marker is created."
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I just saved this plan to .cursor/plans/widget-crud.plan.md after using the cursor-orchestrator skill to add an execution block (implementation_model: composer, parallelism: sequential, verify_each_step: true). It has 4 todos: schema migration, API endpoints, creation form, and integration tests. Execute it.",
+      "expected_output": "The agent recognizes this as an orchestration task, invokes the /orchestrate (or /plan-orchestrator) sub-agent with the plan path, and explains that each todo will be dispatched to /impl-composer with a verifier pass between steps. The agent does not make code edits directly — it coordinates.",
+      "expectations": [
+        "The agent invokes /orchestrate with the plan path or delegates to /plan-orchestrator directly (does not try to implement steps itself).",
+        "The agent correctly identifies that the tier is `composer` → dispatches to `/impl-composer` sub-agent (not /impl-fast, /impl-mini, etc.).",
+        "The agent respects `verify_each_step: true` by planning to invoke /verifier between steps.",
+        "The agent updates each todo's `status` in the plan file as execution progresses (pending → in_progress → completed).",
+        "The agent produces a final summary report of what was implemented, what was verified, and any failures.",
+        "The agent does NOT make file edits itself during the orchestration phase."
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Cursor just announced Composer 3 with better pricing. I want my orchestrator to start using it. Can you refresh the model catalog and update my sub-agent files? I've also hand-edited `.cursor/agents/impl-composer.md` to add a custom instruction — please don't overwrite that.",
+      "expected_output": "The agent invokes the /update-orchestrator command, which runs scripts/update_models.py to fetch the latest pricing page, diffs against the cached catalog, asks for confirmation before regenerating, and then calls scripts/generate_agents.py --regenerate. The user-edited impl-composer.md is preserved (SHA mismatch → skipped with a warning).",
+      "expectations": [
+        "The agent invokes /update-orchestrator (or runs the underlying scripts/update_models.py + generate_agents.py --regenerate sequence).",
+        "The agent runs update_models.py first to fetch and diff the catalog before regenerating anything.",
+        "The agent shows the user the catalog diff (added/removed/repriced/retiered models) before asking for confirmation.",
+        "The agent asks for confirmation before regenerating sub-agent files.",
+        "The user-edited `impl-composer.md` is NOT overwritten — the SHA mismatch protection correctly identifies it as user-modified and skips it with a warning in the report.",
+        "The agent reports which files were regenerated, which were skipped, and the new tier mapping."
+      ]
+    }
+  ]
+}

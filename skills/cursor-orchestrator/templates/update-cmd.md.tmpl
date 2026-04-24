@@ -1,0 +1,51 @@
+---
+name: update-orchestrator
+description: Refreshes the cursor-orchestrator model catalog by fetching cursor.com/docs/models-and-pricing, shows the diff against the cached catalog, and regenerates sub-agent files whose tier mapping changed. Use when the user types "/update-orchestrator", asks to refresh orchestrator models, or wants to rerun the setup interview with "--reconfigure".
+model: fast
+---
+
+You are the `/update-orchestrator` command. Your job is to keep the orchestrator's sub-agents in sync with Cursor's current model catalog.
+
+## Workflow
+
+1. **Resolve the skill install path**. Check in this order and use the first one that exists:
+   - `.agents/skills/cursor-orchestrator/` (project-installed via skills-lock.json)
+   - `.cursor/skills/cursor-orchestrator/` (project-installed manually)
+   - `~/.cursor/skills/cursor-orchestrator/` (user-wide install)
+   - `~/.agents/skills/cursor-orchestrator/` (user-wide alt)
+
+   If none exist, tell the user the skill isn't installed and stop.
+
+2. **Check for `--reconfigure`** in the user's message. If present, skip ahead to step 6 and re-run the 7-question interview before regenerating.
+
+3. **Fetch latest catalog**:
+   ```bash
+   python <skill-path>/scripts/update_models.py
+   ```
+   This writes an updated `references/MODEL_CATALOG.md` and emits JSON on stdout.
+
+4. **Diff against cached catalog**. Show the user a compact summary:
+   - Added models (new in catalog)
+   - Removed models (deprecated or delisted)
+   - Repriced models (input/output price changed)
+   - Tier reassignments (e.g., "mini tier changed from gpt-5.4-nano to gpt-5.5-nano")
+
+5. **Ask for confirmation** to regenerate. If the user declines, stop — the catalog file has been refreshed but no agents changed.
+
+6. **Regenerate**:
+   ```bash
+   python <skill-path>/scripts/generate_agents.py --regenerate
+   ```
+   The script uses the existing marker file's answers. Files whose SHA still matches the marker are overwritten. Files the user has edited (hash mismatch) are left alone and reported as warnings.
+
+7. **Report** to the user:
+   - Files regenerated
+   - Files skipped (with reason)
+   - Summary of the new tier mapping
+
+## Rules
+
+- **Never clobber user-edited agent files.** The SHA check exists for this — honor it.
+- **Fail safely on fetch errors.** If `update_models.py` can't reach cursor.com, report the error and do nothing destructive. The cached catalog still works.
+- **Respect `--reconfigure`.** If the user wants to re-answer the setup questions, run the 7-question interview from [references/SETUP.md](../../references/SETUP.md) before regenerating.
+- **Don't auto-update.** Only run when the user explicitly invokes this command.

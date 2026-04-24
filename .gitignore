@@ -1,0 +1,9 @@
+# MCP
+.mcp.json
+
+# Local Linear skill context (API tokens / team defaults)
+.agents/use-linear/
+
+# Python caches (from skill scripts)
+__pycache__/
+*.pyc

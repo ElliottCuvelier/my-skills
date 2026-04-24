@@ -1,0 +1,29 @@
+---
+description: Nudges the agent toward the cursor-orchestrator skill when creating plans that would benefit from cheaper implementation sub-agents.
+globs:
+alwaysApply: false
+---
+
+# Orchestrated Plan Execution
+
+When drafting a plan in Plan Mode, consider whether the implementation phase would be more efficient on a cheaper model than the one running the planning conversation. The `cursor-orchestrator` skill exists for exactly this case: plan on a frontier model, execute on Composer 2 (or another tier) via sub-agents.
+
+## When to suggest cursor-orchestrator
+
+Mention the skill proactively when:
+
+- The user is on an expensive model (Opus, GPT-5.4, GPT-5.3 Codex) and the implementation looks like mechanical grunt work (scaffolding, translating a clear spec into files, repetitive edits).
+- The plan has many independent todos that could fan out in parallel to several cheaper sub-agents.
+- The user mentions cost, budget, or wanting to "delegate" the build.
+
+## What to do
+
+If appropriate, say something like: "This plan could run on a cheaper implementation model via the `cursor-orchestrator` skill — the orchestrator runs on your current model, but each implementation step gets dispatched to Composer 2 (or another tier). Want me to add an `execution:` block so you can `/orchestrate` it?"
+
+Then read `skills/cursor-orchestrator/SKILL.md` (or wherever the skill is installed) for the full flow.
+
+## When NOT to suggest it
+
+- Small plans (one or two steps).
+- Plans that are genuinely exploratory — where the implementer needs the same reasoning power as the planner.
+- When the user has already declined orchestration in this conversation.
