@@ -20,6 +20,7 @@ CURRENT_VERSION = "0.1.0"
 
 VALID_TIERS = ("haiku", "sonnet", "opus", "inherit")
 VALID_SCOPES = ("project", "user", "both")
+VALID_HOOKS = ("taskids", "pending", "tests")
 
 TIER_DESCRIPTIONS: dict[str, str] = {
     "haiku": "Fastest and cheapest Claude tier — good for straightforward edits, "
@@ -114,6 +115,14 @@ def validate_answers(answers: dict[str, Any]) -> None:
             raise ValueError(
                 f"Answer {key!r} must be {typ.__name__}, got {type(answers[key]).__name__}"
             )
+
+    # hooks is optional — default to empty list for backward compatibility
+    answers.setdefault("hooks", [])
+    if not isinstance(answers["hooks"], list):
+        raise ValueError("Answer 'hooks' must be a list")
+    bad_hooks = [h for h in answers["hooks"] if h not in VALID_HOOKS]
+    if bad_hooks:
+        raise ValueError(f"Invalid hook(s): {bad_hooks!r}. Valid: {list(VALID_HOOKS)}.")
 
     if answers["scope"] not in VALID_SCOPES:
         raise ValueError(

@@ -29,7 +29,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import generate_agents
-from utils import SKILL_ROOT, validate_answers
+from utils import SKILL_ROOT, find_marker_paths, load_marker, validate_answers
 
 
 def _load_json_arg(raw: str | None, path: Path | None, *, what: str) -> Any:
@@ -53,13 +53,21 @@ def run(
 ) -> dict[str, Any]:
     validate_answers(answers)
 
+    # Load any existing marker so SHA protection and hook cleanup work correctly
+    cwd_actual = cwd or Path.cwd()
+    existing_marker = None
+    for mpath in find_marker_paths(cwd_actual):
+        existing_marker = load_marker(mpath)
+        if existing_marker:
+            break
+
     report = generate_agents.generate(
         answers=answers,
         skill_root=skill_root,
         project_agents=project_agents,
         byterover_info=byterover_info,
         codebase_snapshot=codebase_snapshot,
-        existing_marker=None,
+        existing_marker=existing_marker,
         cwd=cwd,
     )
 

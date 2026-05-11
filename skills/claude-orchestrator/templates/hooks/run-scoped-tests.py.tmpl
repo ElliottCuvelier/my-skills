@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+"""
+PostToolUse hook — run the test suite scoped to the changed file after a write/edit.
+
+Reads the changed file path from tool_input in stdin JSON.
+Reads the marker file to get codebase_snapshot.test_runner.
+Runs the scoped test command. If tests fail, prints output so Claude sees it.
+
+Exits 0 always (non-blocking — this hook reports, never denies writes).
+Silently skips when: no file path, unknown test runner, missing marker, or
+test runner binary not found.
+
+Supported runners: jest, vitest, bun:test, pytest
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+MARKER_FILENAME = ".claude-orchestrator-installed"
+
+# (command_prefix, path_is_positional)
+# path_is_positional=True  → path appended as final positional arg
+# path_is_positional=False → path appended as value of preceding flag
+RUNNER_CONFIG: dict[str, tuple[list[str], bool]] = {
+    "jest":    (["npx", "jest", "--passWithNoTests", "--testPathPattern"], False),
+    "vitest":  (["npx", "vitest", "run", "--reporter=verbose"], True),
+    "bun:test": (["bun", "test"], True),
+    "pytest":  (["python", "-m", "pytest", "-x", "--tb=short"], True),
+}
+
+
+def _find_marker(cwd: Path) -> dict | None:
+    for candidate in (
+        cwd / ".claude" / "agents" / MARKER_FILENAME,
+        Path.home() / ".claude" / "agents" / MARKER_FILENAME,
+    ):
+        if candidate.is_file():
+            try:
+                return json.loads(candidate.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                pass
+    return None
+
+
+def _build_command(runner: str, file_path: str) -> list[str] | None:
+    config = RUNNER_CONFIG.get(runner)
+    if config is None:
+        return None
+    prefix, positional = config
+    if positional:
+        return prefix + [file_path]
+    # Non-positional: the preceding element is a flag, path follows it
+    if runner == "jest":
+        return prefix + [re.escape(file_path)]
+    return prefix + [file_path]
+
+
+def main() -> int:
+    try:
+        data = json.loads(sys.stdin.read())
+    except (json.JSONDecodeError, OSError):
+        return 0
+
+    cwd = Path(data.get("cwd") or ".")
+    tool_input = data.get("tool_input") or {}
+
+    # Write uses file_path; Edit/MultiEdit uses path
+    file_path = tool_input.get("file_path") or tool_input.get("path") or ""
+    if not file_path:
+        return 0
+
+    marker = _find_marker(cwd)
+    if not marker:
+        return 0
+
+    runner = (marker.get("codebase_snapshot") or {}).get("test_runner") or "unknown"
+    if runner == "unknown" or runner not in RUNNER_CONFIG:
+        return 0
+
+    cmd = _build_command(runner, file_path)
+    if cmd is None:
+        return 0
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=str(cwd),
+            timeout=120,
+        )
+    except FileNotFoundError:
+        return 0
+    except subprocess.TimeoutExpired:
+        print(f"[orchestrator] Test run timed out for {file_path} ({runner})")
+        return 0
+
+    if result.returncode != 0:
+        output = (result.stdout + result.stderr).strip()
+        print(f"[orchestrator] Tests failed for {file_path} ({runner}):\n{output}")
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

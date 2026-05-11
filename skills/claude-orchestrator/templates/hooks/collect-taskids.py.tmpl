@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+"""
+SubagentStop hook — collect ByteRover taskIds from sub-agent final messages.
+
+Reads `last_assistant_message` from stdin JSON. Parses the `## Memory` section
+for a `Pending review: <taskId>` line. If the taskId is not "none", appends it
+to <cwd>/.claude/orchestrator-taskids.txt (one per line).
+
+Exits 0 always. Prints a short confirmation on stdout when a taskId is captured
+(stdout becomes context injected into the orchestrator session).
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import sys
+from pathlib import Path
+
+
+def main() -> int:
+    try:
+        data = json.loads(sys.stdin.read())
+    except (json.JSONDecodeError, OSError):
+        return 0
+
+    last_message = data.get("last_assistant_message") or ""
+    cwd = Path(data.get("cwd") or ".")
+
+    task_id: str | None = None
+    in_memory = False
+    for line in last_message.splitlines():
+        stripped = line.strip()
+        if stripped == "## Memory":
+            in_memory = True
+            continue
+        if in_memory and stripped.startswith("## "):
+            break
+        if in_memory:
+            m = re.match(r"^\*?Pending review\*?:\s*(.+)", stripped)
+            if m:
+                val = m.group(1).strip()
+                if val.lower() != "none":
+                    task_id = val
+                break
+
+    if not task_id:
+        return 0
+
+    taskids_file = cwd / ".claude" / "orchestrator-taskids.txt"
+    try:
+        taskids_file.parent.mkdir(parents=True, exist_ok=True)
+        with taskids_file.open("a", encoding="utf-8") as f:
+            f.write(task_id + "\n")
+    except OSError:
+        return 0
+
+    print(f"[orchestrator] Collected pending ByteRover review: {task_id}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

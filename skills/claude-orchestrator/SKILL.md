@@ -62,6 +62,9 @@ Use `AskUserQuestion` to ask these seven questions in sequence. Full question wo
 7. **ByteRover handling** — options reflect detection result:
    - If `brv` found on PATH: "Already installed — enable the memory loop (recommended)"
    - If not found: "Install now (`npm install -g byterover-cli`)" / "Skip — omit the memory loop"
+7.5. **Hooks to install** — offered after Q7; options adapt to ByteRover status:
+   - If ByteRover enabled: multi-select `taskids` (SubagentStop taskId collector) / `pending` (Stop review surfacer) / `tests` (PostToolUse scoped test runner). Default: all three.
+   - If ByteRover disabled: single choice — `tests` (scoped test runner) or skip. Default: `tests`.
 
 ### 3. Codebase analysis
 
@@ -164,7 +167,8 @@ Expected answers JSON shape:
   "verifier": true,
   "memory_curator": true,
   "commands": true,
-  "byterover_enabled": true
+  "byterover_enabled": true,
+  "hooks": ["taskids", "pending", "tests"]
 }
 ```
 

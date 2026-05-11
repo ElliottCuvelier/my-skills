@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+"""
+Stop hook — surface pending ByteRover review taskIds to the user.
+
+Reads <cwd>/.claude/orchestrator-taskids.txt. If non-empty, prints a formatted
+block with `brv review approve/reject` commands then clears the file.
+
+Exits 0 always. Output on stdout is injected into the session context before
+Claude's final response, so the user sees the pending reviews immediately.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+
+def main() -> int:
+    try:
+        data = json.loads(sys.stdin.read())
+    except (json.JSONDecodeError, OSError):
+        return 0
+
+    cwd = Path(data.get("cwd") or ".")
+    taskids_file = cwd / ".claude" / "orchestrator-taskids.txt"
+
+    if not taskids_file.is_file():
+        return 0
+
+    try:
+        content = taskids_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        return 0
+
+    if not content:
+        return 0
+
+    task_ids = [line.strip() for line in content.splitlines() if line.strip()]
+    if not task_ids:
+        return 0
+
+    # Clear immediately — don't re-surface if printing fails
+    try:
+        taskids_file.write_text("", encoding="utf-8")
+    except OSError:
+        pass
+
+    count = len(task_ids)
+    noun = "review" if count == 1 else "reviews"
+    lines = [
+        "",
+        f"--- {count} pending ByteRover {noun} ---",
+        "",
+    ]
+    for tid in task_ids:
+        lines.append(f"  brv review approve {tid}")
+        lines.append(f"  brv review reject  {tid}")
+        lines.append("")
+    lines.append(
+        "Run one command per taskId to approve or reject the curated memory entry."
+    )
+    print("\n".join(lines))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

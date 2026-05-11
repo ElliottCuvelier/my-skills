@@ -170,6 +170,45 @@ All 7 are asked in sequence. After collection, run `scripts/analyze_codebase.py`
 
 ---
 
+## Question 7.5 — Hooks to install
+
+**Prompt varies** based on whether `byterover_enabled` is true after Q7.
+
+**When ByteRover enabled:**
+
+> "Which hooks should I install? They run automatically in the background during agent sessions."
+
+**Options (multiSelect):**
+
+| id | label |
+|----|-------|
+| `taskids` | Collect ByteRover taskIds (SubagentStop) — captures `Pending review: <taskId>` from sub-agent final messages into `.claude/orchestrator-taskids.txt` |
+| `pending` | Surface pending reviews on session end (Stop) — prints `brv review approve/reject` commands when the session ends; clears the file |
+| `tests` | Run scoped tests after file writes (PostToolUse) — runs your test suite narrowed to the changed file after every Write/Edit |
+
+**Default:** all three
+
+**When ByteRover NOT enabled:**
+
+> "Should I install the scoped test-runner hook? It runs your test suite narrowed to the changed file after every Write/Edit."
+
+**Options:**
+
+| id | label |
+|----|-------|
+| `tests` | Yes, run scoped tests after file writes |
+| `none` | No, skip hooks |
+
+**Default:** `tests`
+
+Note: selecting `none` sets `answers["hooks"] = []`. The `taskids` and `pending` options are not offered when ByteRover is disabled; if somehow included, they are silently dropped before generation.
+
+**Writes to:** `answers.hooks` — `list[str]`, subset of `["taskids", "pending", "tests"]`. Default `[]`.
+
+**Effect:** Writes Python hook scripts to `<scope>/.claude/hooks/` and registers them in `<scope>/.claude/settings.local.json`. Tracked in the marker under `hooks_installed` and `hooks_settings` for idempotent re-runs and clean removal.
+
+---
+
 ## Q8 — Roster confirmation
 
 After collecting Q1–Q7, run `analyze_codebase.py`, compose the roster from the snapshot + `AGENT_PATTERNS.md`, then present Q8:
@@ -204,7 +243,8 @@ Present each proposed agent as a list:
   "verifier": true,
   "memory_curator": true,
   "commands": true,
-  "byterover_enabled": true
+  "byterover_enabled": true,
+  "hooks": ["taskids", "pending", "tests"]
 }
 ```
 
