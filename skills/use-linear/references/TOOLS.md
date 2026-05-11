@@ -85,20 +85,20 @@ Intent → tool mapping for the official Linear MCP server. Back to [SKILL.md](.
 
 ### Start-of-task (full sequence)
 
-Prefer **Session Bootstrap** in [SKILL.md](../SKILL.md): read `.agents/use-linear/context.yaml`, run `python skills/use-linear/scripts/bootstrap.py`, resolve team/project/labels/cycle from that output; call the `list_*` tools below **only to fill gaps** before `save_issue`.
+Use **Session Start** from [SKILL.md](../SKILL.md): read `.agents/use-linear/context.yaml`, capture git hints, then `list_issues({ assignee: "me", state: "started" })`; call the `list_*` tools below **only to fill gaps** before `save_issue`.
 
 ```
-list_teams()                              → only if team unknown after bootstrap
-list_projects({ team })                   → only if project unknown after bootstrap
-list_issue_labels({ team })               → only if labels unknown after bootstrap
-list_cycles({ teamId, type: "current" })  → only if cycle unknown after bootstrap
+list_teams()                              → only if team unknown from context.yaml
+list_projects({ team })                   → only if project unknown from context.yaml
+list_issue_labels({ team })               → only if labels unknown from context.yaml
+list_cycles({ teamId, type: "current" })  → only if cycle unknown from context.yaml
 // Draft → user confirms →
 save_issue({ team, project, title, description, labels, priority, estimate, cycle })
 // → returns issueId
 
 get_issue(issueId)                        → read current state
 // If already In Progress or further, skip. Otherwise:
-list_issue_statuses({ team })             → only if In Progress name unknown from bootstrap ## states
+list_issue_statuses({ team })             → only if In Progress name unknown from context.yaml
 save_issue({ id: issueId, state: "In Progress" })
 ```
 

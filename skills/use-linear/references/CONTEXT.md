@@ -22,10 +22,10 @@ If missing, copy the template below and edit values for your workspace.
 
 | Key           | Type            | Meaning                                                                                                                                            |
 | ------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `team`        | string          | Default team **key** (e.g. `ENG`) used when drafting issues and reading bootstrap output                                                           |
+| `team`        | string          | Default team **key** (e.g. `ENG`) used when drafting issues and resolving team defaults                                                            |
 | `projects`    | list of strings | Active project **names** you usually attach work to (for drafts; still confirm fit per task)                                                       |
 | `labels`      | list of strings | Label **names** that already exist on that team — never invent labels not listed here without `list_issue_labels` + user confirm                   |
-| `uses_cycles` | boolean         | If `true`, agent should assign cycle on create when unset (resolve cycle via bootstrap or `list_cycles` just-in-time)                              |
+| `uses_cycles` | boolean         | If `true`, agent should assign cycle on create when unset (resolve cycle via `list_cycles({ teamId, type: "current" })` just-in-time)              |
 | `states`      | map             | Optional hints: `in_progress`, `in_review`, `done` → display names your team uses (still verify with `list_issue_statuses` before write if unsure) |
 
 Use **flow-style** lists (`[a, b]`) and a single nested map for `states` to avoid YAML indentation mistakes.
@@ -43,11 +43,11 @@ states:
   done: Done
 ```
 
-## Conflict with bootstrap / Linear
+## Conflict with Linear
 
-If `context.yaml` disagrees with `bootstrap.py` output or `get_issue`, **trust Linear** (API/MCP). Update `context.yaml` when your team renames projects, labels, or states.
+If `context.yaml` disagrees with `get_issue` or other MCP reads, **trust Linear** (MCP). Update `context.yaml` when your team renames projects, labels, or states.
 
 ## Related
 
-- Session snapshot: run `python skills/use-linear/scripts/bootstrap.py` from the repo root (see [CHEATSHEET.md](CHEATSHEET.md)).
+- Session start: see the **Session Start** section in [SKILL.md](../SKILL.md) and [CHEATSHEET.md](CHEATSHEET.md).
 - Protocol: [WORKFLOW.md](WORKFLOW.md) step (a).

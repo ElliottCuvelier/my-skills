@@ -8,14 +8,14 @@ Full expansion of the parallel-progress protocol from [SKILL.md](../SKILL.md). R
 
 ### (a) At task start
 
-**0. Session bootstrap (before any `list_*`).**
+**0. Session start (before any `list_*`).**
 
 1. Read `.agents/use-linear/context.yaml` if it exists (see [CONTEXT.md](CONTEXT.md)).
-2. From the **repository root**, run:
+2. Git hints — two read-only shell calls:
    ```bash
-   python skills/use-linear/scripts/bootstrap.py
+   git branch --show-current
+   git log -n 20 --pretty=%B | grep -Eo '\b[A-Z][A-Z0-9]*-[0-9]+\b' | head -5
    ```
-3. Parse pipe-delimited sections (`## issues`, `## states`, `## projects`, `## cycles`, `## git`) per [SKILL.md](../SKILL.md) Session Bootstrap.
 
 **1. Resolve the issue — re-read from Linear, never from memory.**
 
@@ -25,7 +25,7 @@ If the user provided an issue ID directly:
 get_issue({ id: "ENG-123" })
 ```
 
-Otherwise prefer, in order: IDs from bootstrap `## git` (`linear_trailer`, `issue_id_hint`); a **started** row in `## issues`; then a single narrow MCP search:
+Otherwise prefer, in order: IDs from git branch or recent commit `Linear:` trailers; then a single narrow MCP search:
 
 ```
 list_issues({ assignee: "me", state: "started", limit: 15 })
@@ -39,12 +39,12 @@ If no match and the task is non-trivial, build a draft and present it to the use
 
 - **Title** — action-oriented, ≤60 chars
 - **Description** — what needs to happen and why; acceptance criteria if applicable
-- **Team** — from `context.yaml` `team` or bootstrap `## cycles` / `## states` keys; else `list_teams` once
-- **Project** — from context `projects` or bootstrap `## projects`; else `list_projects` just-in-time for a scope fit. If genuinely self-isolated, leave project-less.
+- **Team** — from `context.yaml` `team`; else `list_teams` once
+- **Project** — from context.yaml `projects`; else `list_projects` just-in-time for a scope fit. If genuinely self-isolated, leave project-less.
 - **Labels** — from context `labels`; else `list_issue_labels` once before save; never invented
 - **Priority** — 0 (none), 1 (urgent), 2 (high), 3 (normal), 4 (low)
 - **Estimate** — set on create (check existing issues for the team's scale convention)
-- **Cycle** — assign to the active cycle if the team uses cycles (bootstrap `## cycles` row for that team, or `list_cycles({ teamId, type: "current" })` just-in-time)
+- **Cycle** — assign to the active cycle if the team uses cycles (`list_cycles({ teamId, type: "current" })` just-in-time)
 - **Parent** — `parentId` if this is a sub-issue
 - **Relations** — if this blocks or is blocked by another issue (`blockedBy`, `blocks`)
 
@@ -56,8 +56,8 @@ Wait for the user to confirm before calling `save_issue`.
 get_issue({ id: issueId })
 // Read the state from the returned object. If already "started", "completed", or "cancelled" → skip.
 // If "unstarted" or "backlog":
-// Prefer bootstrap ## states: pick the row where state_type is "started" and state_name is the team's In Progress label.
-list_issue_statuses({ team })  // only if bootstrap states are ambiguous
+// Prefer context.yaml.states.in_progress if set.
+list_issue_statuses({ team })  // only if state name unknown from context.yaml
 save_issue({ id: issueId, state: "In Progress" })
 ```
 
@@ -185,8 +185,9 @@ save_comment({
 ### Step 1 — Bootstrap, then search if needed
 
 ```
-python skills/use-linear/scripts/bootstrap.py   // scan ## issues + ## git for an existing match
-list_issues({ query: "rate limit search", limit: 10 })   // only if bootstrap did not surface a fit → no matches
+git branch --show-current && git log -n 20 --pretty=%B | grep -Eo '\b[A-Z][A-Z0-9]*-[0-9]+\b' | head -5   // git hints
+list_issues({ assignee: "me", state: "started", limit: 15 })   // check if already tracked → no matches
+list_issues({ query: "rate limit search", limit: 10 })   // keyword search → no matches
 ```
 
 ### Step 2 — Draft + confirm
@@ -211,7 +212,7 @@ User approves → `save_issue({ team: "ENG", project: "...", title: "...", ... }
 
 ```
 get_issue({ id: "ENG-789" })    // state is backlog → proceed
-// Prefer bootstrap ## states for ENG → In Progress row; else:
+// Prefer context.yaml.states.in_progress for ENG; else:
 list_issue_statuses({ team: "ENG" })   // find In Progress
 save_issue({ id: "ENG-789", state: "In Progress" })
 ```

@@ -12,7 +12,7 @@ The official Linear MCP server is your project-management co-pilot. Use it in pa
 | Requirement       | Details                                                                                                                                                                     |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | MCP server        | Varies by installation (official: `https://mcp.linear.app/mcp`; community servers also available)                                                                           |
-| Auth              | OAuth 2.1 (interactive flow in Claude Code) or `Authorization: Bearer <token>` header — the token is bound to a Linear user; the authenticated user is the default assignee |
+| Auth              | Whatever the configured MCP server uses (OAuth 2.1, API key, or the server's own credentials). The skill does not read or require any token directly.                      |
 | Supported clients | Claude Code, Claude Desktop, Cursor, Windsurf, VS Code, Zed, and any MCP-compatible client                                                                                  |
 | Primary tools     | `save_issue`, `save_comment`, `save_project` (unified upsert); `list_*` / `get_*` for reading                                                                               |
 | Tool surface      | Check the session's actual tool list — prefix varies by server (e.g., `mcp__linear-wi__save_issue` or `mcp__linear__save_issue`)                                            |
@@ -33,7 +33,7 @@ The official Linear MCP server is your project-management co-pilot. Use it in pa
 
 2. **Linear updates run in parallel with code, not after.** State transitions, sub-issue creation, and comments happen as they occur. Batching them to the end defeats the purpose.
 
-3. **Bootstrap first, discover lazily.** At task start, read [`.agents/use-linear/context.yaml`](../../../.agents/use-linear/context.yaml) (if present) for default team, project names, label names, and cycle convention — then run `python skills/use-linear/scripts/bootstrap.py` from the **repository root** for a fresh snapshot (one Shell call). Use that output plus git hints to see what is in flight **before** any `list_*` MCP calls. Call `list_issue_labels`, `list_issue_statuses`, `list_projects`, `list_teams`, and `list_cycles` **only just-in-time** — immediately before a `save_*` when you need to resolve a name/ID not already covered by context + snapshot. Never invent label strings or status names from memory alone.
+3. **Context first, discover lazily.** At task start, read [`.agents/use-linear/context.yaml`](../../../.agents/use-linear/context.yaml) (if present) for default team, project names, label names, and cycle convention — then run two read-only `git` shell calls to surface the current branch and recent commit issue IDs. Use those plus a single `list_issues({ assignee: "me", state: "started" })` call to see what is in flight **before** any further `list_*` MCP calls. Call `list_issue_labels`, `list_issue_statuses`, `list_projects`, `list_teams`, and `list_cycles` **only just-in-time** — immediately before a `save_*` when you need to resolve a name/ID not already covered by context or git hints. Never invent label strings or status names from memory alone.
 
 4. **Documents for durable knowledge; comments for timeline events.** Specs, RFCs, ADRs, runbooks → Linear Documents. Progress milestones, blockers, findings, and deviations → issue comments. Don't bury durable content in comments where it's impossible to find later.
 
@@ -41,30 +41,24 @@ The official Linear MCP server is your project-management co-pilot. Use it in pa
 
 6. **Confirm before creating.** `save_issue` (new), `save_project` (new), `create_issue_label`, and `create_document` all require presenting a draft and waiting for explicit user confirmation. The agent is not a PM; it assists the PM.
 
-## Session Bootstrap
+## Session Start
 
-Goal: answer **“what issue am I on?”** and **“which team / projects / labels are defaults?”** without a chain of `list_*` MCP round-trips.
+Goal: answer **”what issue am I on?”** and **”which team / projects / labels are defaults?”** cheaply, without an auth dependency.
 
 1. **Read local context** — If `.agents/use-linear/context.yaml` exists at the repo root, read it first. Schema and template: [references/CONTEXT.md](references/CONTEXT.md). If missing, offer once to create it from that template (user fills team/projects/labels).
 
-2. **Run the bootstrap script** — From the repository root:
+2. **Git hints** — Two read-only shell calls (no Linear auth required):
 
    ```bash
-   python skills/use-linear/scripts/bootstrap.py
+   git branch --show-current
+   git log -n 20 --pretty=%B | grep -Eo ‘\b[A-Z][A-Z0-9]*-[0-9]+\b’ | head -5
    ```
 
-   Uses the Linear GraphQL API with the same API key as in `.mcp.json` (`Authorization: Bearer …` value; personal keys starting `lin_api_` are sent **without** the `Bearer` prefix per Linear’s API rules) or `LINEAR_API_KEY`. On failure it prints `# bootstrap: <reason>` and exits 0 — fall back to MCP `list_*` as before.
+   The first gives the current branch (look for a `[A-Z]+-\d+` pattern). The second surfaces issue IDs from recent commit messages, including `Linear: ENG-123` trailers and bare identifiers.
 
-3. **Parse the snapshot** — Output is pipe-delimited tables under `##` section headers. Example:
-   - `## issues (id|state|title|project|cycle)` — each data line: `IDENT|State name|title text|project name|cycle name`
-   - `## cycles (team|name|ends)` — active cycle per team (may be empty if the team does not use cycles)
-   - `## states (team|state_name|state_type)` — workflow states (use `state_type` for started/unstarted/completed; use `state_name` for `save_issue` when MCP accepts names)
-   - `## projects (name|state|target)` — in-flight projects
-   - `## git (key|value)` — current branch and `linear_trailer` / `issue_id_hint` lines from recent commits
+3. **Pick the working issue** — Prefer, in order: (a) issue ID from user message → `get_issue(id)` directly; (b) ID found in git output → `get_issue(id)`; (c) single targeted MCP call: `list_issues({ assignee: “me”, state: “started”, limit: 15 })`; (d) if still ambiguous, broaden with `list_issues({ assignee: “me”, state: “unstarted” })` or a keyword query.
 
-   Split each row on `|`. Treat the snapshot as **read-through cache** — it is not a substitute for `get_issue` right before a state transition or handoff.
-
-4. **Pick the working issue** — Prefer, in order: (a) issue ID from user message; (b) `linear_trailer` / `issue_id_hint` from `## git`; (c) branch name matching `[A-Z]+-\d+`; (d) a row in `## issues` whose **state** name matches `context.yaml` → `states.in_progress` if set, else the single **active** started-type issue you are clearly continuing; (e) if `## states` has multiple `state_type: started` rows (e.g. In Progress vs In Review) and context does not disambiguate, call `list_issue_statuses` once then choose; (f) if still ambiguous, `list_issues({ assignee: "me", state: "started" })` then `get_issue`.
+   Treat `list_issues` results as a point-in-time snapshot — always `get_issue` again before acting on state for handoffs or user-visible reports.
 
 ## The Parallel-Progress Protocol
 
@@ -72,9 +66,9 @@ Follow this protocol for every non-trivial task. It runs in parallel with coding
 
 ### (a) At task start — before writing code
 
-1. **Find an existing issue (bootstrap first).** Complete **Session Bootstrap** above. If the user named an ID (e.g., `ENG-123`), call `get_issue` directly — re-read from Linear, never rely on memory. Otherwise resolve the issue from snapshot/git (see Session Bootstrap §4). Only if still unknown, call `list_issues` filtered by keywords/team (start narrow: `assignee: "me"`, `state: "started"`, then broaden if needed).
-2. **If no match and task is non-trivial:** draft an issue — title, description, team (from `context.yaml` or bootstrap `## cycles` / `## states` keys; else `list_teams` once), project (from context preferred projects or bootstrap `## projects`; else `list_projects` just-in-time), labels (from context `labels` list; else `list_issue_labels` once before save), priority, estimate, cycle (if `uses_cycles` in context or snapshot shows cycles; else `list_cycles` just-in-time), parent or relations if applicable. **Present the draft to the user. Wait for confirmation.** Then call `save_issue`.
-3. **Move to In Progress.** First, call `get_issue` to read the current state. If it's already at or past In Progress, skip the transition — never regress status. If it's still in Backlog/Todo, resolve the In Progress state name from bootstrap `## states` (`state_type: started`) for that team, or call `list_issue_statuses` just-in-time if ambiguous — then `save_issue`. Never hard-code status UUIDs from memory.
+1. **Find an existing issue (session start first).** Complete **Session Start** above. If the user named an ID (e.g., `ENG-123`), call `get_issue` directly — re-read from Linear, never rely on memory. Otherwise resolve the issue from git hints (see Session Start §3). Only if still unknown, call `list_issues` filtered by keywords/team (start narrow: `assignee: "me"`, `state: "started"`, then broaden if needed).
+2. **If no match and task is non-trivial:** draft an issue — title, description, team (from `context.yaml`; else `list_teams` once), project (from context.yaml `projects`; else `list_projects` just-in-time), labels (from context `labels` list; else `list_issue_labels` once before save), priority, estimate, cycle (if `uses_cycles` in context.yaml; else `list_cycles` just-in-time), parent or relations if applicable. **Present the draft to the user. Wait for confirmation.** Then call `save_issue`.
+3. **Move to In Progress.** First, call `get_issue` to read the current state. If it's already at or past In Progress, skip the transition — never regress status. If it's still in Backlog/Todo, resolve the In Progress state name from `context.yaml.states.in_progress` if set, or call `list_issue_statuses` just-in-time — then `save_issue`. Never hard-code status UUIDs from memory.
 4. **Capture durable spec.** If the task has a written spec or design that will be referenced repeatedly, create a Linear Document (`create_document`) or update the issue description. Do not bury specs in comments.
 
 ### (b) While working — continuously
@@ -143,7 +137,7 @@ list_issues({ assignee: "me", state: "unstarted" })  // todo / backlog assigned 
 // for "what's on my plate" queries
 ```
 
-Memory entries about Linear can be hours or days stale — they're context, not ground truth. The bootstrap script output is the same class: fresh at run time, but always **`get_issue` again** before acting on state for handoffs or user-visible status reports.
+Memory entries about Linear can be hours or days stale — they're context, not ground truth. `list_issues` results are the same: fresh when fetched, but always **`get_issue` again** before acting on state for handoffs or user-visible status reports.
 
 ## Quick Decision Trees
 
@@ -154,7 +148,7 @@ Is Linear MCP present in the session?
 ├── No  → Skip Linear entirely
 └── Yes → Is this a trivial one-line / typo fix?
            ├── Yes → Skip, or add a passing comment on an existing issue
-           └── No  → Session Bootstrap, then resolve issue (snapshot/git/`get_issue`); only then `list_issues` if still unknown
+           └── No  → Session Start (context.yaml + git hints → `get_issue` if ID known); else `list_issues({ assignee: "me", state: "started" })` then `get_issue`
                       ├── Found → Use it (update state, add sub-issues as needed)
                       └── Not found → Draft + confirm + save_issue
 ```
@@ -195,7 +189,7 @@ Multi-issue deliverable with a ship date?
 └── Yes → Project (search for a fit; if none, leave project-less or ask)
 
 Time-boxed sprint-style commitment?
-└── Yes → Cycle (assign on create if team uses cycles; discover via bootstrap `## cycles` or `list_cycles` just-in-time)
+└── Yes → Cycle (assign on create if team uses cycles; discover via `list_cycles({ teamId, type: "current" })` just-in-time)
 
 Single unit of work?
 └── Yes → Issue (with sub-issues for decomposition)
@@ -225,8 +219,8 @@ Full model with promotion rules in [references/HIERARCHY.md](references/HIERARCH
 | Label                            | Recurring cross-cutting attribute (bug, tech-debt, area, security)                                | Prefer `context.yaml` `labels`; else **`list_issue_labels` just-in-time**; `create_issue_label` only with user confirmation |
 | Priority                         | Set on create; if already set and needs changing, offer the change                                | `save_issue`                                                                                                                |
 | Estimate                         | Set on create if unset; if already set and diverges ≥ ~50%, offer the change                      | `save_issue`                                                                                                                |
-| Cycle                            | Assign on create if team uses cycles and field is unset; offer change if already set              | Bootstrap `## cycles` or `list_cycles` just-in-time → `save_issue`                                                          |
-| Project                          | If orphan, search for a fit; don't force; if self-isolated, leave project-less                    | Bootstrap `## projects` or `context.yaml` projects; else `list_projects` / `save_project` (confirm first)                   |
+| Cycle                            | Assign on create if team uses cycles and field is unset; offer change if already set              | context.yaml `uses_cycles` + `list_cycles({ teamId, type: "current" })` just-in-time → `save_issue`                        |
+| Project                          | If orphan, search for a fit; don't force; if self-isolated, leave project-less                    | context.yaml `projects`; else `list_projects` / `save_project` (confirm first)                                              |
 | Initiative                       | Quarter/half-scale strategic grouping; read-mostly; create only on explicit ask                   | `list_initiatives` / `save_initiative` (confirm first)                                                                      |
 | **Project Update**               | While project is in progress — at milestone, blocker, scope shift, health change. Not on cadence. | `save_status_update` (pass `project` name/ID; `health`: `onTrack`/`atRisk`/`offTrack`)                                      |
 | Project milestone                | Split a long project into explicit gates                                                          | `save_milestone` (pass `project` name/ID, `name`; confirm first)                                                            |
@@ -264,7 +258,7 @@ The primary tools are `save_issue` (create or update), `save_comment`, and `save
 | **Comment flood**                   | One comment per commit, per file, or per thought                                    | Three types only: Progress, Blocker, Finding. No narration.                                                           |
 | **"Starting work now" comment**     | Narrating a status change that already communicates itself                          | Status transition is the signal — no comment needed                                                                   |
 | **Spec buried in comments**         | Full spec posted as a comment, silently invalidated later                           | Create a Linear Document; link from the issue                                                                         |
-| **Hard-coded status / label names** | Assuming "In Progress" or "Bug" from memory                                         | Bootstrap `## states` + `context.yaml` hints; else `list_issue_statuses` / `list_issue_labels` just-in-time           |
+| **Hard-coded status / label names** | Assuming "In Progress" or "Bug" from memory                                         | `context.yaml` hints; else `list_issue_statuses` / `list_issue_labels` just-in-time                                  |
 | **Silent deviations**               | Changing user-visible behavior or API without a comment                             | Finding comment with Deviation template per protocol (c)                                                              |
 | **Branch-name mandates**            | Forcing `ENG-123-foo` branch naming                                                 | Issue ID goes in commits + PR only; branch naming is out of scope                                                     |
 | **Silently overwriting set fields** | Changing estimate/priority/cycle that user already set                              | Offer the change; don't silently overwrite                                                                            |

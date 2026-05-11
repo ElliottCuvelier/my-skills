@@ -4,15 +4,17 @@ One-screen quick reference. Back to [SKILL.md](../SKILL.md).
 
 ---
 
-## Session bootstrap (once per task, before `list_*`)
+## Session start (once per task, before `list_*`)
 
-From **repo root**:
+1. Read `.agents/use-linear/context.yaml` if present ([CONTEXT.md](CONTEXT.md)).
+2. Git hints — two read-only shell calls:
+   ```bash
+   git branch --show-current
+   git log -n 20 --pretty=%B | grep -Eo '\b[A-Z][A-Z0-9]*-[0-9]+\b' | head -5
+   ```
+3. `list_issues({ assignee: "me", state: "started" })` to see what is in flight.
 
-```bash
-python skills/use-linear/scripts/bootstrap.py
-```
-
-Read `.agents/use-linear/context.yaml` if present ([CONTEXT.md](CONTEXT.md)). Parse pipe rows under `## issues`, `## states`, `## projects`, `## cycles`, `## git`. Use `list_teams` / `list_projects` / `list_issue_labels` / `list_issue_statuses` / `list_cycles` **only just-in-time** before a `save_*` when something is missing from context + snapshot.
+Use `list_teams` / `list_projects` / `list_issue_labels` / `list_issue_statuses` / `list_cycles` **only just-in-time** before a `save_*` when something is missing from context.yaml.
 
 ---
 
@@ -20,8 +22,8 @@ Read `.agents/use-linear/context.yaml` if present ([CONTEXT.md](CONTEXT.md)). Pa
 
 Before writing a single line of code:
 
-- [ ] **Bootstrap** — `context.yaml` + `python skills/use-linear/scripts/bootstrap.py` (if script prints `# bootstrap: …`, fall back to MCP discovery)
-- [ ] **Resolve issue** — user ID / git hints / `## issues` started row → `get_issue`; else narrow `list_issues({ assignee: "me", state: "started" })`
+- [ ] **Session start** — read `context.yaml`, git hints, `list_issues({ assignee: "me", state: "started" })`
+- [ ] **Resolve issue** — user ID / git hints / `list_issues` started result → `get_issue`
 - [ ] **Draft + confirm** — title, description, team, project, labels, priority, estimate, cycle (prefer context + snapshot; `list_*` only to fill gaps)
 - [ ] **Create** — `save_issue(...)` after user confirms
 - [ ] **Check current state** — `get_issue({ id })` — already In Progress? skip transition
