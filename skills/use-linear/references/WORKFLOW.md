@@ -37,7 +37,7 @@ Only broaden (keywords / team) if still no candidate.
 
 If no match and the task is non-trivial, build a draft and present it to the user before calling `save_issue`. The draft should include:
 
-- **Title** — action-oriented, ≤60 chars
+- **Title** — action-oriented, ≤60 chars; **no manual numbering** (e.g., no "1.", "#3 -", "Step 2:") — Linear assigns the canonical ID (e.g., `ENG-123`) automatically
 - **Description** — what needs to happen and why; acceptance criteria if applicable
 - **Team** — from `context.yaml` `team`; else `list_teams` once
 - **Project** — from context.yaml `projects`; else `list_projects` just-in-time for a scope fit. If genuinely self-isolated, leave project-less.
