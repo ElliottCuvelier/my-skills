@@ -1,0 +1,39 @@
+Run the update flow for claude-orchestrator. Arguments: $ARGUMENTS
+
+Steps:
+
+1. **Locate the skill scripts** — search in this order:
+   - `.claude/skills/claude-orchestrator/scripts/`
+   - `~/.claude/skills/claude-orchestrator/scripts/`
+
+   If not found, tell the user to re-install via skills-lock.json.
+
+2. **Re-analyze the codebase** (if analyze_codebase.py is available):
+   ```bash
+   python <skill-dir>/scripts/analyze_codebase.py --cwd .
+   ```
+   Compare the new fingerprint against the stored fingerprint in the marker file.
+   If changed, show a diff of new vs previous signals and propose new/changed project agents.
+
+3. **Re-detect ByteRover** (if detect_byterover.py is available):
+   ```bash
+   python <skill-dir>/scripts/detect_byterover.py --cwd .
+   ```
+   If ByteRover state changed (newly installed or newly removed), offer to regenerate
+   agents with/without the ByteRover loop accordingly.
+
+4. **Regenerate** (SHA-protected):
+   ```bash
+   python <skill-dir>/scripts/generate_agents.py --regenerate \
+     [--byterover-info '<json>'] \
+     [--codebase-snapshot '<json>'] \
+     [--project-agents '<json>']
+   ```
+   - Files whose SHA matches the stored marker hash → overwritten with latest template.
+   - Files whose SHA does NOT match → user-edited; skip with warning.
+   - Pre-existing untracked files → registered, never touched.
+
+5. **If `--reconfigure` is in the arguments**: re-run the claude-orchestrator skill's
+   7-question interview first (ask the user to type the skill name or trigger a new session).
+
+6. **Report**: N files regenerated / M skipped (user-edited) / K newly registered / errors.

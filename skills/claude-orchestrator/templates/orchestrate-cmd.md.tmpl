@@ -1,0 +1,12 @@
+Execute the plan at the path provided using the `plan-orchestrator` sub-agent.
+
+Plan path: $ARGUMENTS
+
+Tell the plan-orchestrator to:
+1. Read the plan file at the given path.
+2. Parse its `execution:` block (or ask the user if missing).
+3. Dispatch each `pending` todo to the appropriate sub-agent.
+4. Update todo statuses in the plan file as it proceeds.
+5. Return a final summary with results, verifier outcomes, and any pending ByteRover review taskIds.
+
+If the path is not provided or is invalid, ask the user to specify the full plan path (typically under `~/.claude/plans/`).

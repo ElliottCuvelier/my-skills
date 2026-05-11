@@ -15,6 +15,11 @@
       "source": "sickn33/antigravity-awesome-skills",
       "sourceType": "github",
       "computedHash": "f0f625132cf53116cb27725926e2c99f142861b9063d459938dd85fbf8e2bf61"
+    },
+    "claude-orchestrator": {
+      "source": "ElliottCuvelier/my-skills",
+      "sourceType": "github",
+      "skillPath": "skills/claude-orchestrator"
     }
   }
 }

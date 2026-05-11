@@ -1,0 +1,16 @@
+Resume an interrupted plan execution using the `plan-orchestrator` sub-agent.
+
+Plan path: $ARGUMENTS
+
+Tell the plan-orchestrator to:
+1. Read the plan file at the given path.
+2. Find the first todo with `status: pending` or `status: in_progress`.
+3. Show the user a summary:
+   - Todos already `completed`: list them with brief outcomes
+   - Next todo to execute: its id and content
+   - Remaining `pending` todos: count
+4. Ask the user: **continue from here** / **abort** / **restart from an earlier todo** (if so, which id?)
+5. If continuing: dispatch from the first pending/in_progress todo, following the normal execution flow.
+6. Return a final summary as usual.
+
+If no todos are pending or in_progress (all completed or failed), tell the user the plan is already finished and show the final state.

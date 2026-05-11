@@ -1,0 +1,48 @@
+<!-- BEGIN BYTEROVER LOOP -->
+## ByteRover memory loop (mandatory)
+
+1. **Recall** — Before doing anything else:
+
+   ```bash
+   brv search "<task keywords>" {{AGENT_SCOPE_FLAG}}--format json --limit 10
+   ```
+
+   If the scoped search returns 0 results, broaden by dropping `--scope`:
+
+   ```bash
+   brv search "<task keywords>" --format json --limit 10
+   ```
+
+   Read the top hits from `.brv/context-tree/`. Use them. They encode prior decisions
+   you must respect.
+
+   **Do NOT call `brv query`** — that costs an LLM call and is reserved for the
+   orchestrator. Use `brv search` only.
+
+2. **Work** — Do the agent's actual job (see "When invoked" above).
+
+3. **Curate** — If you discovered a non-trivial pattern, decision, or convention worth
+   remembering across sessions:
+
+   ```bash
+   brv curate "<one-paragraph summary>" -f <up-to-5-relevant-paths>
+   ```
+
+   Curate-when triggers for this agent: {{CURATE_WHEN}}
+
+   - **Block until done.** Never use `--detach` inside a sub-agent — your context is
+     gone after you return; nothing remains to verify a detached curate.
+   - **Skip if nothing new was learned.** Explicit "skipped — nothing new" beats a
+     low-signal curate.
+   - **Pending review** — if `brv curate` reports pending items, return the `taskId`
+     in your final message. Do NOT call `brv review approve`; the orchestrator collects
+     taskIds and surfaces them to the user.
+   - **Curate errors are non-fatal.** If `brv curate` fails (provider down, file path
+     rejected, etc.), log `curate: failed — <reason>` and continue. Do not fail the
+     step over a memory write.
+
+4. **Report** — End your message with a `## Memory` section:
+   - **Recalled**: 1-2 lines on what `brv search` returned (or "no relevant prior context").
+   - **Curated**: curate text + `logId`, "skipped — nothing new", or "curate: failed — <reason>".
+   - **Pending review**: any `taskId` returned by `brv curate`, or "none".
+<!-- END BYTEROVER LOOP -->
