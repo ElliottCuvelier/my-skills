@@ -146,6 +146,19 @@ save_comment({ issueId: "ENG-123", body: "..." })
 
 ---
 
+## Label Taxonomy
+
+Labels encode *what kind of work* or *which part of the system*. Nothing else.
+
+| Category | Examples |
+| -------- | -------- |
+| **Type** — what kind of work | `feature`, `bug`, `improvement`, `tech-debt`, `chore` |
+| **Service / Domain** — which service or area | `api`, `web-client`, `serverless`, `mobile`, `cli`, `infra`, `data`, `security` |
+
+**Not labels:** temporary groupings (`wave-1`, `sprint-3`, `q2-cleanup`), status-like tags (`blocked`, `ready`), or person tags. Use Linear's native priority, status, assignee, and cycle fields for those.
+
+---
+
 ## Priority Reference
 
 | Value | Issues      | Projects    |

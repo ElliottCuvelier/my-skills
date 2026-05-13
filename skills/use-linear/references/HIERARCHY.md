@@ -41,6 +41,7 @@ The primary ownership boundary. Issues, labels, cycles, and workflow states are 
 ### Initiative
 
 - **Scope:** Multi-project; quarter/half-year strategic bet.
+- **Name:** Descriptive of the strategic theme (e.g., `Platform Observability`, `User Sessions`). No `Wave X`, `Phase Y`, or coded prefixes.
 - **Create when:** Multiple projects share a strategic theme and stakeholders need a single place to track progress across all of them.
 - **Skip when:** You have a single project or the grouping is just for convenience. Projects can stand alone.
 - **MCP:** `list_initiatives`, `get_initiative`, `save_initiative` (confirm before creating). See [TOOLS.md](TOOLS.md).
@@ -48,9 +49,17 @@ The primary ownership boundary. Issues, labels, cycles, and workflow states are 
 ### Project
 
 - **Scope:** Multi-issue deliverable with a defined end state and usually a ship date.
+- **Name:** Descriptive of scope (e.g., `Infrastructure Hardening Q2`, `Platform Reliability`). Do not prefix with `Wave`, `Phase`, or coded identifiers — use plain language.
 - **Create when:** Work spans ≥ 3 issues and has a shared deliverable.
 - **If an issue is orphan:** call `list_projects` and find one whose scope matches the work. If a clear fit exists, attach it. If the work is genuinely self-isolated (one-off fix, no initiative), leave it project-less — don't force-assign a bad-fit project.
 - **MCP:** `list_projects`, `save_project` (confirm first).
+
+### Milestone
+
+- **Scope:** A named progress gate within a project; marks a meaningful ship checkpoint.
+- **Naming:** Use an `M<N>` prefix for ordering clarity, followed by a short descriptive name: `M1 Foundation`, `M2 Public Beta`, `M3 GA`. The `M<N>` prefix is the only coded identifier permitted at the project level — it directly serves readability rather than retroactive grouping.
+- **Create when:** A project spans multiple meaningful checkpoints that stakeholders need to track independently.
+- **MCP:** `save_milestone` (pass `project` name/ID, `name`; confirm before creating).
 
 ### Issue
 
@@ -133,3 +142,5 @@ Create an initiative (confirm first) when:
 | Cycle omitted on create | Issue floats with no sprint ownership | Always `list_cycles` and assign on create when team uses cycles |
 | Project missing target date | Project update health has no timeline context | Set `targetDate` on `save_project` |
 | Initiative created for a single project | Over-engineering; nobody maintains it | Projects can stand alone; initiatives are for multi-project themes |
+| Wave / Phase / Group prefix on titles | "Wave 2 Auth", "Phase 3 Deploy" — becomes stale; obscures meaning | Use plain descriptive titles; Linear's canonical IDs are auto-assigned |
+| Coding labels as temporary groupings | `wave-1`, `sprint-3` labels fragment taxonomy and expire | Labels are durable taxonomy only: type (`feature`, `bug`, …) or service/domain (`api`, `web-client`, …) |
