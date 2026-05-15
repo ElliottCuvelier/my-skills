@@ -58,11 +58,13 @@ Infrastructure → Application → Domain
 Where does it go?
 ├─ Pure business logic, no I/O           → domain/
 ├─ Orchestrates domain + has side effects → commands/ or queries/ (application layer)
-├─ Talks to external systems              → infrastructure/persistence/ or infrastructure/adapters/
-├─ Defines HOW to interact (interface)    → port (*.repository.port.ts or libs/ports/)
+├─ Talks to external systems              → infrastructure/persistence/ (persistence) or ports/ (other outbound)
+├─ Defines HOW to interact (interface)    → port (*.repository.port.ts, ports/*.port.ts, or libs/ports/)
 ├─ Implements a port                      → adapter (*.repository.ts, infrastructure/)
 └─ Handles HTTP/GraphQL/CLI input         → *.http.controller.ts, *.graphql-resolver.ts
 ```
+
+Domain events stay inside a single process; integration events cross process boundaries and carry a stable, versioned payload.
 
 ### "Is this an Entity or Value Object?"
 
@@ -117,6 +119,8 @@ src/
 │       ├── {module-name}.module.ts              # NestJS module (composition root)
 │       ├── {module-name}.di-tokens.ts           # DI token constants
 │       ├── {module-name}.mapper.ts              # Domain <-> Persistence mapper
+│       ├── integration-events/
+│       │   └── {event}.integration-event.ts     # Integration event class definitions
 │       ├── domain/
 │       │   ├── {entity}.entity.ts               # Aggregate root / entities
 │       │   ├── {entity}.types.ts                # Domain types and interfaces
@@ -125,24 +129,32 @@ src/
 │       │   │   └── {vo}.value-object.ts
 │       │   └── events/
 │       │       └── {event}.domain-event.ts
-│       ├── commands/
-│       │   └── {use-case}/
-│       │       ├── {use-case}.command.ts         # Command DTO
-│       │       ├── {use-case}.service.ts         # Command handler
-│       │       ├── {use-case}.http.controller.ts # HTTP entry point
-│       │       └── {use-case}.request.dto.ts     # Request validation
-│       ├── queries/
-│       │   └── {query}/
-│       │       ├── {query}.query-handler.ts
-│       │       ├── {query}.http.controller.ts
-│       │       └── {query}.request.dto.ts
+│       ├── application/
+│       │   ├── commands/
+│       │   │   └── {use-case}/
+│       │   │       ├── {use-case}.command.ts         # Command DTO
+│       │   │       ├── {use-case}.handler.ts         # Command handler
+│       │   │       ├── {use-case}.http.controller.ts # HTTP entry point
+│       │   │       └── {use-case}.request.dto.ts     # Request validation
+│       │   ├── queries/
+│       │   │   └── {query}/
+│       │   │       ├── {query}.query-handler.ts
+│       │   │       ├── {query}.http.controller.ts
+│       │   │       └── {query}.request.dto.ts
+│       │   ├── domain-event-handlers/
+│       │   │   └── {event}/
+│       │   │       └── {handler}.handler.ts     # Domain event handler
+│       │   └── integration-event-handlers/
+│       │       └── {trigger}/
+│       │           └── {handler}.handler.ts     # Integration event handler
+│       ├── ports/
+│       │   └── {service}.port.ts                # Non-persistence outbound port interfaces
 │       ├── infrastructure/
 │       │   ├── persistence/
 │       │   │   ├── {entity}.repository.port.ts  # Repository interface (DRIVEN PORT)
 │       │   │   ├── {entity}.repository.ts       # Prisma implementation
 │       │   │   └── {aggregate}.prisma           # Per-aggregate Prisma schema
-│       │   └── adapters/                        # External service adapters (optional)
-│       │       ├── {service}.port.ts
+│       │   └── adapters/                        # Non-persistence adapter implementations
 │       │       └── {service}.adapter.ts
 │       └── dtos/
 │           └── {entity}.response.dto.ts         # Response serialization
@@ -154,7 +166,7 @@ src/
 └── main.ts
 ```
 
-This structure uses **vertical slicing** -- each use case (command or query) gets its own directory containing the handler, controller, DTO, and command/query object. Files that change together live together. Prisma schema files are split per aggregate and co-located with the repository implementation so that each module owns its persistence model.
+This structure uses **vertical slicing** -- each use case (command or query) gets its own directory containing the handler, controller, DTO, and command/query object. Files that change together live together. Prisma schema files are split per aggregate and co-located with the repository implementation so that each module owns its persistence model. Domain and integration event handler directories sit inside `application/` alongside commands and queries; integration event class definitions live at the module root in `integration-events/`.
 
 ## DDD Building Blocks
 
@@ -163,10 +175,11 @@ This structure uses **vertical slicing** -- each use case (command or query) get
 | **Entity**          | Identity + behavior                | Domain            | Equality by ID                       | `*.entity.ts`                         |
 | **Value Object**    | Immutable data                     | Domain            | Equality by value, no setters        | `*.value-object.ts`                   |
 | **Aggregate Root**  | Consistency boundary               | Domain            | Only root is referenced externally   | `*.entity.ts` (extends AggregateRoot) |
-| **Domain Event**    | Record of change                   | Domain            | Past tense naming (`UserCreated`)    | `*.domain-event.ts`                   |
+| **Domain Event**      | Record of change                      | Domain            | Past tense naming (`UserCreated`)                               | `*.domain-event.ts`                   |
+| **Integration Event** | Cross-process change notification     | Application       | Payload is stable across service versions; published via outbox | `*.integration-event.ts`              |
 | **Repository Port** | Persistence abstraction            | Domain (port)     | Per aggregate, not per table         | `*.repository.port.ts`                |
 | **Domain Service**  | Stateless cross-entity logic       | Domain            | When logic doesn't fit one entity    | `*.domain-service.ts`                 |
-| **Command Handler** | Write use case orchestration       | Application       | One handler per command              | `*.service.ts`                        |
+| **Command Handler** | Write use case orchestration       | Application       | One handler per command              | `*.handler.ts`                        |
 | **Query Handler**   | Read use case                      | Application       | Can bypass domain, query DB directly | `*.query-handler.ts`                  |
 | **Controller**      | HTTP/GraphQL/CLI entry point       | Interface Adapter | Parses input, returns output         | `*.http.controller.ts`                |
 | **Mapper**          | Domain <-> Persistence translation | Infrastructure    | Keeps domain ignorant of DB schema   | `*.mapper.ts`                         |
@@ -190,8 +203,8 @@ This structure uses **vertical slicing** -- each use case (command or query) get
 
 1. **Discover the Domain** -- Event Storming, conversations with domain experts, identify aggregates and bounded contexts.
 2. **Model the Domain** -- Entities, value objects, aggregates, domain events. No infrastructure code yet.
-3. **Define Ports** -- Repository interfaces, external service interfaces. Place in `infrastructure/persistence/` and `libs/ports/`.
-4. **Implement Use Cases** -- Command and query handlers in `commands/` and `queries/` directories.
+3. **Define Ports** -- Repository interfaces in `infrastructure/persistence/`; non-persistence outbound port interfaces in `ports/`; shared cross-module ports in `libs/ports/`.
+4. **Implement Use Cases** -- Command and query handlers in `application/commands/` and `application/queries/` directories.
 5. **Add Adapters Last** -- Prisma schema (`.prisma` file per aggregate), Prisma repositories, HTTP controllers, mappers. Wire everything in the NestJS module.
 
 **DDD is collaborative.** Modeling sessions with domain experts are as important as the code patterns.

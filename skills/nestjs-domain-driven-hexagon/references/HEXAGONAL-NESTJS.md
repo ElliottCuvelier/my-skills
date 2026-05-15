@@ -10,6 +10,7 @@ Hexagonal Architecture (Ports and Adapters) isolates the application core from e
 - [Adapter Swapping](#adapter-swapping)
 - [Mapper Pattern](#mapper-pattern)
 - [Request Context](#request-context)
+- [Centralized ACL Controllers](#centralized-acl-controllers)
 
 ---
 
@@ -62,7 +63,7 @@ export interface LoggerPort {
 }
 ```
 
-Other common driven ports: `EmailPort`, `PaymentGatewayPort`, `FileStoragePort`, `MessageBrokerPort`.
+Other common driven ports: `EmailPort`, `PaymentGatewayPort`, `FileStoragePort`, `MessageBrokerPort`. Module-specific non-persistence ports belong in `modules/{module}/ports/`; those shared across modules go in `libs/ports/`.
 
 ### Driver Ports (Inbound)
 
@@ -73,7 +74,7 @@ Driver ports define how external actors interact with the application. In NestJS
 // The handler implementation is the adapter.
 
 @CommandHandler(CreateUserCommand)
-export class CreateUserService implements ICommandHandler {
+export class CreateUserCommandHandler implements ICommandHandler {
   async execute(
     command: CreateUserCommand,
   ): Promise<Result<AggregateID, UserAlreadyExistsError>> {
@@ -84,11 +85,11 @@ export class CreateUserService implements ICommandHandler {
 
 ### Port Placement
 
-| Port Type                      | Location                                                           | Example                   |
-| ------------------------------ | ------------------------------------------------------------------ | ------------------------- |
-| Repository ports               | `modules/{module}/infrastructure/persistence/*.repository.port.ts` | `UserRepositoryPort`      |
-| Shared infrastructure ports    | `libs/ports/*.port.ts`                                             | `LoggerPort`, `EmailPort` |
-| Module-specific external ports | `modules/{module}/infrastructure/adapters/*.port.ts`               | `PaymentGatewayPort`      |
+| Port Type                                      | Location                                                           | Rationale                                                | Example                   |
+| ---------------------------------------------- | ------------------------------------------------------------------ | -------------------------------------------------------- | ------------------------- |
+| Repository ports                               | `modules/{module}/infrastructure/persistence/*.repository.port.ts` | Tightly coupled to persistence layer                     | `UserRepositoryPort`      |
+| Module-specific non-persistence outbound ports | `modules/{module}/ports/*.port.ts`                                 | Interface belongs at the application boundary, not infra | `PaymentGatewayPort`      |
+| Shared cross-module ports                      | `libs/ports/*.port.ts`                                             | Shared contract across multiple modules                  | `LoggerPort`, `EmailPort` |
 
 ### Interface Segregation
 
@@ -195,7 +196,7 @@ Use a dedicated `*.di-tokens.ts` file per module. Tokens are module-scoped const
     { provide: USER_REPOSITORY, useClass: UserRepository },
     { provide: USER_LOGGER, useFactory: () => new Logger('UserModule') },
     UserMapper,
-    CreateUserService,
+    CreateUserCommandHandler,
     FindUsersQueryHandler,
   ],
 })
@@ -210,7 +211,7 @@ import { USER_REPOSITORY } from '../../user.di-tokens';
 import { UserRepositoryPort } from '../../infrastructure/persistence/user.repository.port';
 
 @CommandHandler(CreateUserCommand)
-export class CreateUserService implements ICommandHandler {
+export class CreateUserCommandHandler implements ICommandHandler {
   constructor(
     @Inject(USER_REPOSITORY)
     private readonly userRepo: UserRepositoryPort,
@@ -568,3 +569,88 @@ this.metadata = {
 ```
 
 This means every domain event emitted during a request carries the same correlation ID, making it possible to trace the entire flow from HTTP request through command handler, domain events, and side effects in logs and monitoring.
+
+---
+
+## Centralized ACL Controllers
+
+An Anti-Corruption Layer (ACL) controller handles a single inbound channel — a webhook endpoint, a message-bus consumer, or a GraphQL gateway — and translates all incoming events or commands into internal application commands or domain events.
+
+### When to Use
+
+Use a centralized ACL controller when:
+
+- A single external channel (webhook URL, Kafka consumer, SQS listener) triggers multiple distinct internal commands.
+- You want to isolate the translation between external message formats and internal command objects in one place.
+- The external format is outside your control and likely to change independently of your domain.
+
+For REST APIs where each endpoint maps to one use case, prefer individual `*.http.controller.ts` files per use case — those are simpler and keep change locality.
+
+### The Invariant
+
+An ACL controller MUST dispatch exclusively via `CommandBus.execute()` or `EventEmitter2.emitAsync()`. It MUST NOT:
+
+- Inject or call a repository directly.
+- Import adapter classes.
+- Contain domain logic.
+
+The ACL controller is an infrastructure adapter. Its only job is format translation and dispatch.
+
+### Webhook Controller Example
+
+```typescript
+// src/modules/payment/infrastructure/adapters/stripe-webhook.controller.ts
+
+import { Controller, Post, Body, Headers, HttpCode } from '@nestjs/common';
+import { CommandBus } from '@nestjs/cqrs';
+import { HandlePaymentSucceededCommand } from '../../application/commands/handle-payment-succeeded/handle-payment-succeeded.command';
+import { HandlePaymentFailedCommand } from '../../application/commands/handle-payment-failed/handle-payment-failed.command';
+
+@Controller('webhooks/stripe')
+export class StripeWebhookController {
+  constructor(private readonly commandBus: CommandBus) {}
+
+  @Post()
+  @HttpCode(200)
+  async handle(
+    @Body() payload: unknown,
+    @Headers('stripe-signature') signature: string,
+  ): Promise<void> {
+    const event = this.parseAndVerify(payload, signature);
+
+    switch (event.type) {
+      case 'payment_intent.succeeded':
+        await this.commandBus.execute(
+          new HandlePaymentSucceededCommand({
+            paymentIntentId: event.data.object.id,
+            amount: event.data.object.amount,
+          }),
+        );
+        break;
+      case 'payment_intent.payment_failed':
+        await this.commandBus.execute(
+          new HandlePaymentFailedCommand({
+            paymentIntentId: event.data.object.id,
+            failureCode: event.data.object.last_payment_error?.code,
+          }),
+        );
+        break;
+      default:
+        break;
+    }
+  }
+
+  private parseAndVerify(payload: unknown, signature: string): StripeEvent {
+    // Signature verification; throw if invalid
+  }
+}
+```
+
+### Contrast with Per-Use-Case Controllers
+
+| Pattern                    | When                                       | Location                                                              |
+| -------------------------- | ------------------------------------------ | --------------------------------------------------------------------- |
+| `*.http.controller.ts`     | One REST endpoint, one use case            | `application/commands/{use-case}/` or `application/queries/{query}/` |
+| Centralized ACL controller | One external channel, multiple use cases   | `infrastructure/adapters/{channel}.controller.ts`                     |
+
+Default to per-use-case controllers. Reach for the ACL controller only when the external channel forces multiplexing.

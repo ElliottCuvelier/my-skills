@@ -90,6 +90,9 @@ The `CqrsModule` provides `CommandBus`, `QueryBus`, and `EventBus`. Handlers are
 
 ## Commands
 
+> [!WARNING]
+> **NestJS CQRS v11+ Compatibility** In v11, `ICommandHandler` and `IQueryHandler` changed from interfaces to **type aliases**. This has one non-obvious consequence: if you define an abstract base handler class with `implements ICommandHandler<TCommand, TResult>` using explicit generic parameters, TypeScript compiles but the NestJS CQRS runtime may silently fail to dispatch the handler. Drop the `implements` clause on abstract base classes and rely on structural typing — TypeScript still enforces the contract and the runtime works correctly. Using `implements ICommandHandler` without generics on concrete handlers (as shown in all examples here) remains safe.
+
 A Command represents a user's intent to change state. It carries the data needed for the operation but does not execute it.
 
 ### Command Base Class
@@ -152,7 +155,7 @@ export class CreateUserCommand extends Command {
 The handler IS the use case. One handler per command, one command per use case.
 
 ```typescript
-// src/modules/user/commands/create-user/create-user.service.ts
+// src/modules/user/application/commands/create-user/create-user.handler.ts
 
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { Inject } from '@nestjs/common';
@@ -167,7 +170,7 @@ import { ConflictException } from '@libs/exceptions';
 import { CreateUserCommand } from './create-user.command';
 
 @CommandHandler(CreateUserCommand)
-export class CreateUserService implements ICommandHandler {
+export class CreateUserCommandHandler implements ICommandHandler {
   constructor(
     @Inject(USER_REPOSITORY)
     protected readonly userRepo: UserRepositoryPort,
@@ -205,8 +208,6 @@ export class CreateUserService implements ICommandHandler {
 3. **No HTTP concerns.** The handler doesn't know about status codes, request objects, or response formats.
 4. **Avoid command-to-command chains.** Don't have one command handler execute another command. Use events instead: Command -> Event -> Command.
 5. **Use the command bus for dispatching.** Controllers use `commandBus.execute(command)`, which decouples the controller from the handler.
-
-> **@nestjs/cqrs v11 note:** `ICommandHandler` and `IQueryHandler` changed from interfaces to type aliases. Using `implements ICommandHandler` without generics (as shown above) still works. However, if you create abstract base handler classes with generic params like `implements ICommandHandler<TCommand, TResult>`, drop the `implements` clause and rely on structural typing instead -- TypeScript will still enforce the contract.
 
 ### Dispatching from a Controller
 
@@ -450,7 +451,7 @@ When a command handler publishes domain events that trigger side effects (creati
 
 ```typescript
 @CommandHandler(CreateUserCommand)
-export class CreateUserService implements ICommandHandler {
+export class CreateUserCommandHandler implements ICommandHandler {
   async execute(
     command: CreateUserCommand,
   ): Promise<Result<AggregateID, UserAlreadyExistsError>> {
@@ -503,6 +504,34 @@ A domain event handler should publish an integration event when the side effect 
 - Sending a message to another microservice.
 - Calling an external API.
 - Publishing to a message broker (RabbitMQ, Kafka, SQS).
+
+### Integration Event Class
+
+Define integration events as typed classes. The payload must be serializable and stable across service versions — avoid embedding domain objects.
+
+```typescript
+// src/modules/user/integration-events/user-created.integration-event.ts
+
+export class UserCreatedIntegrationEvent {
+  readonly eventType = 'user.created' as const;
+  readonly userId: string;
+  readonly email: string;
+  readonly occurredAt: number; // Unix timestamp ms
+
+  constructor(props: { userId: string; email: string; occurredAt: number }) {
+    this.userId = props.userId;
+    this.email = props.email;
+    this.occurredAt = props.occurredAt;
+  }
+}
+```
+
+File naming: `{event}.integration-event.ts` inside the module-level `integration-events/` directory.
+
+**Domain event vs. integration event:**
+
+- `UserCreatedDomainEvent` — in-process, carries rich domain types, consumed via `@OnEvent()` within the same process.
+- `UserCreatedIntegrationEvent` — crosses process boundaries, carries only primitive/serializable fields, published to a message broker via the outbox pattern.
 
 ### Outbox Pattern
 
