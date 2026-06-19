@@ -50,7 +50,7 @@
 | `test-runner` | `test/` or `**/*.spec.ts` | (no scope — test patterns are cross-cutting) |
 | `impl-haiku/sonnet/opus` | (no scope) | (no scope — generic; curates go wherever relevant) |
 | `memory-curator` | (no scope) | `orchestration/plans/` (for plan-level curates) |
-| `plan-orchestrator` | (no scope) | `orchestration/plans/` + `orchestration/tiers/` + `orchestration/failures/` |
+| orchestrating session | (no scope) | `orchestration/plans/` + `orchestration/tiers/` + `orchestration/failures/` |
 
 ## ByteRover search cost
 
