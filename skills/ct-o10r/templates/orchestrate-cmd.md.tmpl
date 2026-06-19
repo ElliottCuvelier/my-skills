@@ -1,0 +1,9 @@
+Run the saved plan at the path below as a Claude Code **agent team**. **You — this current session — are the team LEAD. You coordinate teammates and never edit files yourself; teammates own the file lanes and make the edits.**
+
+Plan path: $ARGUMENTS
+
+1. Confirm agent teams are enabled: `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` must be set in settings.json `env` (read at startup). If it is not set, **stop** and tell the user to add it and restart — do NOT fall back to one-shot sub-agents.
+2. Locate the installed skill directory (`.claude/skills/ct-o10r/`, else `~/.claude/skills/ct-o10r/`) and read its `references/TEAM_ORCHESTRATION.md` — the lead playbook.
+3. Follow the playbook: load the marker, read the plan, partition todos into file-disjoint lanes, spawn one teammate per lane (each pinned to the right model), seed the shared task list from the todos (dependencies + per-lane assignment, with a `Files: [...]` line in each task description), then coordinate, verify, consolidate ByteRover memory, shut teammates down, and print the final report (results + any pending `brv review` taskIds).
+
+If the path is not provided or is invalid, ask the user for the full plan path (typically under `~/.claude/plans/`).

@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+"""
+TaskCreated hook — record each task's file lane into the ct-o10r sidecar.
+
+Fires when the lead creates a task. The TaskCompleted gate later needs to know
+which files a task touches, but the TaskCompleted payload carries no file list —
+so we capture it here, where the payload still has taskDescription.
+
+The lead writes a machine-parseable line into each task description:
+    Files: [path/one, path/two]
+This hook parses that line and stores {taskId: [files]} in
+~/.claude/ct-o10r/<team_name>/scoped-files.json.
+
+Exits 0 always (never blocks task creation).
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import sys
+from pathlib import Path
+
+_FILES_RE = re.compile(r"(?im)^\s*Files:\s*\[(.*?)\]")
+
+
+def _parse_files(description: str) -> list[str]:
+    m = _FILES_RE.search(description)
+    if not m:
+        return []
+    inner = m.group(1).strip()
+    if not inner:
+        return []
+    parts = [p.strip().strip("'\"") for p in inner.split(",")]
+    return [p for p in parts if p]
+
+
+def main() -> int:
+    try:
+        data = json.loads(sys.stdin.read())
+    except (json.JSONDecodeError, OSError):
+        return 0
+
+    team_name = data.get("team_name") or ""
+    task_id = data.get("taskId") or data.get("task_id") or ""
+    description = data.get("taskDescription") or data.get("task_description") or ""
+    if not team_name or not task_id:
+        return 0
+
+    files = _parse_files(description)
+    if not files:
+        return 0  # no Files: line -> nothing to record (gate fails open later)
+
+    sidecar = Path.home() / ".claude" / "ct-o10r" / team_name / "scoped-files.json"
+    try:
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        existing: dict = {}
+        if sidecar.is_file():
+            try:
+                existing = json.loads(sidecar.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                existing = {}
+        existing[task_id] = files
+        sidecar.write_text(
+            json.dumps(existing, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+    except OSError:
+        return 0
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

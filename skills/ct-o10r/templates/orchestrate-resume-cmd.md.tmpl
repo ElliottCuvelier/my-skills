@@ -1,0 +1,11 @@
+Resume an interrupted agent-team run for the plan below. **You — this current session — are the team LEAD; you coordinate teammates and never edit files yourself.**
+
+Plan path: $ARGUMENTS
+
+1. Confirm `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` is set (settings.json `env`, read at startup). If not, **stop** and tell the user to set it and restart.
+2. Locate the skill (`.claude/skills/ct-o10r/`, else `~/.claude/skills/ct-o10r/`) and read `references/TEAM_ORCHESTRATION.md`, especially **Step 0R (Resume)**.
+3. The native task list at `~/.claude/tasks/<team-name>/` persists across resume, but in-process teammates do NOT. So: read the task list as the source of truth, **reset any orphaned `in_progress` task back to pending** (its teammate died with the previous session — otherwise its dependents stay blocked), recompute lanes from the still-open tasks, respawn the needed teammates, and re-assign only the open tasks.
+4. Show the user a summary: tasks already `completed`, the open tasks to resume, and the lanes/teammates you will respawn. Ask: **continue** / **abort** / **restart a specific task**.
+5. If continuing, run the playbook's coordinate → verify → consolidate → report steps over the open tasks.
+
+If every task is already `completed`, tell the user the plan is finished and show the final state.

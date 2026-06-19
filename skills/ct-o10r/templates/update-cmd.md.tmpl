@@ -1,0 +1,36 @@
+Run the update flow for ct-o10r. Arguments: $ARGUMENTS
+
+Steps:
+
+1. **Locate the skill scripts** — search in this order:
+   - `.claude/skills/ct-o10r/scripts/`
+   - `~/.claude/skills/ct-o10r/scripts/`
+
+   If not found, tell the user to re-install via skills-lock.json.
+
+2. **Re-analyze the codebase**:
+   ```bash
+   python <skill-dir>/scripts/analyze_codebase.py --cwd .
+   ```
+   Compare the new fingerprint against the stored fingerprint in the marker. If changed, show a diff of new vs previous signals and propose new/changed teammate roles.
+
+3. **Re-detect ByteRover**:
+   ```bash
+   python <skill-dir>/scripts/detect_byterover.py --cwd .
+   ```
+   If ByteRover state changed (newly installed or newly removed), offer to regenerate roles with/without the ByteRover loop accordingly.
+
+4. **Regenerate** (SHA-protected):
+   ```bash
+   python <skill-dir>/scripts/generate_agents.py --regenerate \
+     [--byterover-info '<json>'] \
+     [--codebase-snapshot '<json>'] \
+     [--project-agents '<json>']
+   ```
+   - Files whose SHA matches the stored marker hash → overwritten with the latest template.
+   - Files whose SHA does NOT match → user-edited; skipped with a warning.
+   - Pre-existing untracked files → registered, never touched.
+
+5. **If `--reconfigure` is in the arguments**: re-run the ct-o10r skill's setup interview first (ask the user to type the skill name or trigger a new session).
+
+6. **Report**: N files regenerated / M skipped (user-edited) / K newly registered / errors.
