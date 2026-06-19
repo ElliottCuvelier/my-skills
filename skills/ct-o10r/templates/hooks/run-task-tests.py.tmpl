@@ -1,0 +1,133 @@
+#!/usr/bin/env python3
+"""
+TaskCompleted hook — gate task completion on scoped tests.
+
+Fires when a teammate marks a task complete. Looks up the task's files in the
+ct-o10r files sidecar (written by the TaskCreated hook), runs the project's test
+runner scoped to those files, and:
+  - exit 0 if tests pass (or there's nothing to test) -> completion proceeds
+  - exit 2 if tests fail -> completion is blocked, the task stays in_progress,
+    and stderr is sent back to the teammate as feedback to fix and retry.
+
+Reads team_name + taskId from the stdin JSON payload. The sidecar lives at
+~/.claude/ct-o10r/<team_name>/scoped-files.json (a {taskId: [files]} map). The
+test runner comes from the install marker's codebase_snapshot.test_runner.
+
+Fails open: if there's no sidecar entry, no known runner, or the runner binary
+is missing, exit 0 (never block a task on missing config).
+
+Supported runners: jest, vitest, bun:test, pytest
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+MARKER_FILENAME = ".ct-o10r-installed"
+
+# runner -> (command_prefix, path_is_positional)
+# positional=True  -> file paths appended as positional args
+# positional=False -> jest-style: a single --testPathPattern with alternation
+RUNNER_CONFIG: dict[str, tuple[list[str], bool]] = {
+    "jest":     (["npx", "jest", "--passWithNoTests", "--testPathPattern"], False),
+    "vitest":   (["npx", "vitest", "run", "--reporter=verbose"], True),
+    "bun:test": (["bun", "test"], True),
+    "pytest":   (["python", "-m", "pytest", "-x", "--tb=short"], True),
+}
+
+
+def _find_marker(cwd: Path) -> dict | None:
+    for candidate in (
+        cwd / ".claude" / "agents" / MARKER_FILENAME,
+        Path.home() / ".claude" / "agents" / MARKER_FILENAME,
+    ):
+        if candidate.is_file():
+            try:
+                return json.loads(candidate.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                pass
+    return None
+
+
+def _sidecar_files(team_name: str, task_id: str) -> list[str]:
+    sidecar = Path.home() / ".claude" / "ct-o10r" / team_name / "scoped-files.json"
+    if not sidecar.is_file():
+        return []
+    try:
+        data = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    files = data.get(task_id) or []
+    return [f for f in files if isinstance(f, str)]
+
+
+def _build_command(runner: str, files: list[str]) -> list[str] | None:
+    config = RUNNER_CONFIG.get(runner)
+    if config is None:
+        return None
+    prefix, positional = config
+    if positional:
+        return prefix + files
+    # jest: one --testPathPattern with an alternation of escaped paths
+    return prefix + ["|".join(re.escape(f) for f in files)]
+
+
+def main() -> int:
+    try:
+        data = json.loads(sys.stdin.read())
+    except (json.JSONDecodeError, OSError):
+        return 0
+
+    cwd = Path(data.get("cwd") or ".")
+    team_name = data.get("team_name") or ""
+    task_id = data.get("taskId") or data.get("task_id") or ""
+    if not team_name or not task_id:
+        return 0
+
+    files = _sidecar_files(team_name, task_id)
+    if not files:
+        return 0  # nothing mapped for this task -> don't gate
+
+    marker = _find_marker(cwd)
+    if not marker:
+        return 0
+    runner = (marker.get("codebase_snapshot") or {}).get("test_runner") or "unknown"
+    if runner == "unknown" or runner not in RUNNER_CONFIG:
+        return 0
+
+    cmd = _build_command(runner, files)
+    if cmd is None:
+        return 0
+
+    try:
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, cwd=str(cwd), timeout=120,
+        )
+    except FileNotFoundError:
+        return 0  # runner binary missing -> fail open
+    except subprocess.TimeoutExpired:
+        print(
+            f"Scoped tests for task {task_id} timed out ({runner}). "
+            "Investigate before completing.",
+            file=sys.stderr,
+        )
+        return 2
+
+    if result.returncode != 0:
+        out = (result.stdout + result.stderr).strip()
+        print(
+            f"Scoped tests failed for task {task_id} ({runner}) on "
+            f"{', '.join(files)} — fix and mark complete again:\n\n{out}",
+            file=sys.stderr,
+        )
+        return 2  # block completion; teammate receives stderr as feedback
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

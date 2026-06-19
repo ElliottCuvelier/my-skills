@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+"""
+TeammateIdle hook — backstop collector for ByteRover review taskIds.
+
+Primary channel: each teammate messages the lead `BRV-REVIEW <taskId>` after it
+curates, and the lead surfaces those in its final report. This hook is the
+belt-and-suspenders backstop: when a teammate goes idle, scan its transcript for
+`Pending review: <taskId>` lines it produced (a teammate accumulates several
+`## Memory` sections across its tasks) and append new ids to
+~/.claude/ct-o10r/<team_name>/brv-pending.txt for the lead to merge in.
+
+Reads team_name + transcript_path from the stdin JSON payload (TeammateIdle does
+not include the last message, so we read the transcript file directly).
+
+Exits 0 always — exit 2 here would prevent the teammate from going idle.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import sys
+from pathlib import Path
+
+_PENDING_RE = re.compile(r"(?im)^\s*\*?Pending review\*?:\s*(.+?)\s*$")
+
+
+def _iter_assistant_text(transcript_path: Path):
+    """Yield assistant-message text blocks from a JSONL transcript, tolerantly."""
+    try:
+        lines = transcript_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        msg = obj.get("message") if isinstance(obj.get("message"), dict) else obj
+        if msg.get("role") not in (None, "assistant"):
+            continue
+        content = msg.get("content")
+        if isinstance(content, str):
+            yield content
+        elif isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and isinstance(block.get("text"), str):
+                    yield block["text"]
+
+
+def _extract_taskids(text: str) -> list[str]:
+    ids: list[str] = []
+    for m in _PENDING_RE.finditer(text):
+        val = m.group(1).strip()
+        if val and val.lower() != "none":
+            ids.append(val.split()[0])  # taskId is the first token; drop trailing notes
+    return ids
+
+
+def main() -> int:
+    try:
+        data = json.loads(sys.stdin.read())
+    except (json.JSONDecodeError, OSError):
+        return 0
+
+    team_name = data.get("team_name") or ""
+    transcript_path = data.get("transcript_path") or ""
+    if not team_name or not transcript_path:
+        return 0
+
+    found: list[str] = []
+    for text in _iter_assistant_text(Path(transcript_path)):
+        found.extend(_extract_taskids(text))
+    if not found:
+        return 0
+
+    pending_file = Path.home() / ".claude" / "ct-o10r" / team_name / "brv-pending.txt"
+    try:
+        pending_file.parent.mkdir(parents=True, exist_ok=True)
+        seen: set[str] = set()
+        if pending_file.is_file():
+            seen = set(pending_file.read_text(encoding="utf-8").split())
+        new = [t for t in dict.fromkeys(found) if t not in seen]
+        if new:
+            with pending_file.open("a", encoding="utf-8") as f:
+                for t in new:
+                    f.write(t + "\n")
+    except OSError:
+        return 0
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
