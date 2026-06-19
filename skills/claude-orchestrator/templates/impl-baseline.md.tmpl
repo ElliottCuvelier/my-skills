@@ -1,10 +1,10 @@
 ---
 name: impl-${tier_name}
-description: Implements a single plan step using ${model_label}. ${tier_description} Invoked only by plan-orchestrator when a plan's execution.implementation_model equals "${tier_name}" or when a todo's model_override is "${tier_name}". Do not invoke directly for user requests — use this only when dispatched by the orchestrator.
+description: Implements a single plan step using ${model_label}. ${tier_description} Invoked only when the orchestrating session dispatches a plan step whose execution.implementation_model equals "${tier_name}" (or a todo's model_override is "${tier_name}"). Do not auto-delegate for general user requests — use this only when dispatched during plan orchestration.
 model: ${tier_name}
 ---
 
-You implement one step of a plan handed to you by `plan-orchestrator`.
+You implement one step of a plan handed to you by the orchestrating session (the main Claude Code session running the plan).
 
 ${byterover_loop}
 

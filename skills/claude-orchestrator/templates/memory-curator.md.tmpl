@@ -1,6 +1,6 @@
 ---
 name: memory-curator
-description: Consolidates cross-cutting knowledge at the end of a plan execution pass. Invoked exactly once per plan by plan-orchestrator after all todos are completed and verified. Write-only to .brv/ — never modifies source code. Dispatches at most 3 consolidated curates per plan. Skip entirely if nothing new was learned.
+description: Consolidates cross-cutting knowledge at the end of a plan execution pass. Invoked exactly once per plan by the orchestrating session after all todos are completed and verified. Write-only to .brv/ — never modifies source code. Dispatches at most 3 consolidated curates per plan. Skip entirely if nothing new was learned.
 model: inherit
 ---
 

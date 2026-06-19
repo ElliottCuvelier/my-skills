@@ -13,7 +13,7 @@ Common issues, their root causes, and how to fix them.
 **Fix:**
 1. Check that the agent file contains `<!-- BEGIN BYTEROVER LOOP -->` — if missing, `byterover_enabled` was `false` at generation time. Run `/update-claude-orchestrator` to regenerate with the loop.
 2. If the loop block is present but the agent skipped it: re-invoke and explicitly say "follow the ByteRover memory loop — run `brv search` first before doing any work."
-3. If `brv` is not on PATH at run time (e.g., different shell): install via `npm install -g byterover-cli` and ensure it's in your PATH. The `plan-orchestrator` will warn in its final report if sub-agents are missing `## Memory` sections.
+3. If `brv` is not on PATH at run time (e.g., different shell): install via `npm install -g byterover-cli` and ensure it's in your PATH. The orchestrating session will warn in its final report if sub-agents are missing `## Memory` sections.
 
 ---
 
@@ -51,7 +51,7 @@ Common issues, their root causes, and how to fix them.
 **Cause:** A `.claude/agents/foo.md` file was present before the orchestrator was set up. It's registered in `registered_existing_agents` in the marker and will never be clobbered.
 
 **Options:**
-- **Keep existing** — don't generate a new agent with that name. The existing agent stays and will be used by the `plan-orchestrator` for scope-matched todos.
+- **Keep existing** — don't generate a new agent with that name. The existing agent stays and will be used by the orchestrating session for scope-matched todos.
 - **Rename proposed** — generate the new agent under a different name (e.g., `wi-be-domain-modeler-v2`).
 - **Skip proposed** — don't generate a project agent for that role; fall back to `impl-<tier>` for those todos.
 
@@ -106,7 +106,7 @@ The skill always refers to plans by their full path, so `/claude-orchestrate ~/.
 
 **Symptom:** Cost is higher than expected; a sub-agent's `## Memory` section shows it used `brv query`.
 
-**Cause:** A sub-agent called `brv query` instead of `brv search`. Only the `plan-orchestrator` is allowed to call `brv query` (costs an LLM call). Sub-agents must use `brv search` only (BM25, free).
+**Cause:** A sub-agent called `brv query` instead of `brv search`. Only the orchestrating session (the one running `/claude-orchestrate`) may call `brv query` (costs an LLM call). Sub-agents must use `brv search` only (BM25, free).
 
 **Fix:** Re-read the sub-agent's file and verify the ByteRover loop says "Do NOT call `brv query`." If the agent is user-edited and that instruction was removed, re-add it or regenerate.
 
@@ -144,6 +144,16 @@ The skill always refers to plans by their full path, so `/claude-orchestrate ~/.
 
 **Symptom:** A todo in the plan file shows `in_progress` but the sub-agent has finished and returned.
 
-**Cause:** The `plan-orchestrator` is responsible for updating todo statuses — it updates `pending → in_progress → completed` around each dispatch. If the orchestrator was interrupted mid-step, the status may be stuck.
+**Cause:** The orchestrating session is responsible for updating todo statuses — it updates `pending → in_progress → completed` around each dispatch. If orchestration was interrupted mid-step, the status may be stuck.
 
 **Fix:** Use `/claude-orchestrate-resume <plan>` — it reads the plan, finds the first `pending` or `in_progress` todo, and resumes from there. The resume command will update the status correctly on completion.
+
+---
+
+## Orchestration spawns a separate agent / loses planning context
+
+**Symptom:** Running `/claude-orchestrate` starts a fresh `plan-orchestrator` sub-agent that knows nothing about the planning conversation.
+
+**Cause:** A pre-refactor install. Older versions shipped a `plan-orchestrator` sub-agent (`.claude/agents/plan-orchestrator.md`) that the command delegated to. Sub-agents always run in an isolated context, so the planning context was lost. Current versions make the session that runs the command the orchestrator.
+
+**Fix:** Run `/update-claude-orchestrator` to regenerate. The obsolete `plan-orchestrator.md` is removed automatically (or preserved with a warning if you edited it — delete it manually, then re-run). The refreshed `/claude-orchestrate` command and `references/ORCHESTRATION.md` make the current session dispatch each step directly.

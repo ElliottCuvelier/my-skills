@@ -105,8 +105,9 @@ def _next_steps(answers: dict[str, Any]) -> list[str]:
         )
     else:
         steps.append(
-            "Slash commands are disabled. Invoke the orchestrator directly "
-            "with the `plan-orchestrator` sub-agent."
+            "Slash commands are disabled. To run a plan, in a session where this "
+            "skill is active say e.g. 'orchestrate ~/.claude/plans/<plan>.md' — the "
+            "session reads references/ORCHESTRATION.md and dispatches each step."
         )
     if answers["byterover_enabled"]:
         steps.append(

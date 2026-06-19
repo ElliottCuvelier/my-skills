@@ -34,7 +34,6 @@ This skill is distributed via `skills-lock.json`. In a target repo:
 │   ├── skills/claude-orchestrator/   ← the installed skill (read-only source)
 │   ├── agents/
 │   │   ├── .claude-orchestrator-installed  ← marker file (JSON, tracks versions + SHAs)
-│   │   ├── plan-orchestrator.md
 │   │   ├── impl-haiku.md
 │   │   ├── impl-sonnet.md
 │   │   ├── impl-inherit.md
@@ -63,6 +62,7 @@ skills/claude-orchestrator/
 ├── references/
 │   ├── SETUP.md                      ← Q1–Q7 interview wording + answers payload schema
 │   ├── PLAN_FORMAT.md                ← execution: block schema
+│   ├── ORCHESTRATION.md              ← dispatch playbook the orchestrating session follows
 │   ├── MODEL_TIERS.md                ← 4 model values + use-case guidance
 │   ├── AGENT_PATTERNS.md             ← signal → agent recipe library
 │   ├── BYTEROVER_LOOP.md             ← canonical Recall→Work→Curate→Report fragment
@@ -75,7 +75,6 @@ skills/claude-orchestrator/
 │   ├── generate_agents.py            ← renders templates → .claude/agents/ + commands/
 │   └── setup.py                      ← first-run entry point
 └── templates/
-    ├── plan-orchestrator.md.tmpl
     ├── impl-baseline.md.tmpl
     ├── project-agent.md.tmpl
     ├── verifier.md.tmpl
@@ -112,7 +111,7 @@ skills/claude-orchestrator/
 - No automatic `brv review approve` — always surfaces to user.
 - No automatic `brv vc push` — cloud sync is user-driven.
 - No cross-project plan resume.
-- No sub-agent → sub-agent dispatch (only orchestrator dispatches; sub-agents always return to orchestrator).
+- No sub-agent → sub-agent dispatch (only the orchestrating session dispatches; sub-agents always return to it).
 - No cost-savings guarantees — sub-agents may downgrade silently; the verifier catches it.
 
 ## Limitations

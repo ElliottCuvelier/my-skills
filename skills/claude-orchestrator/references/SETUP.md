@@ -78,7 +78,7 @@ All 7 are asked in sequence. After collection, run `scripts/analyze_codebase.py`
 
 **Writes to:** `answers.verifier` (bool)
 
-**Effect:** If yes, `agents/verifier.md` is generated with `model: haiku`. The `plan-orchestrator` invokes it between steps when the plan has `verify_each_step: true`.
+**Effect:** If yes, `agents/verifier.md` is generated with `model: haiku`. The orchestrating session invokes it between steps when the plan has `verify_each_step: true`.
 
 ---
 
@@ -97,29 +97,31 @@ All 7 are asked in sequence. After collection, run `scripts/analyze_codebase.py`
 
 **Writes to:** `answers.memory_curator` (bool)
 
-**Effect:** If yes, `agents/memory-curator.md` is generated with `model: inherit`. The orchestrator dispatches it as the final step when `curate_on_completion: true` in the plan.
+**Effect:** If yes, `agents/memory-curator.md` is generated with `model: inherit`. The orchestrating session dispatches it as the final step when `curate_on_completion: true` in the plan.
 
 ---
 
 ## Question 6 — Slash commands
 
-**Prompt:** "Install `/claude-orchestrate`, `/claude-orchestrate-resume`, and `/update-claude-orchestrator` as slash commands? (These are thin wrappers so you can invoke the orchestrator with a short command.)"
+**Prompt:** "Install `/claude-orchestrate`, `/claude-orchestrate-resume`, and `/update-claude-orchestrator` as slash commands? (Thin wrappers that point the current session at the orchestration playbook.)"
 
 **Options:**
 
 | id | label |
 |----|-------|
 | `yes` | Yes, install all three commands (recommended) |
-| `no` | No, I'll invoke `plan-orchestrator` directly |
+| `no` | No — I'll trigger orchestration in-session (e.g., "build this plan") |
 
 **Default:** `yes`
 
 **Writes to:** `answers.commands` (bool)
 
 **Effect:** If yes, generates three files in `.claude/commands/`:
-- `claude-orchestrate.md` — delegates to `plan-orchestrator` with a plan path argument
+- `claude-orchestrate.md` — points the current session at `references/ORCHESTRATION.md` to dispatch the plan
 - `claude-orchestrate-resume.md` — resumes from the first `pending` or `in_progress` todo
 - `update-claude-orchestrator.md` — re-analyzes the codebase and regenerates agents
+
+If no: orchestration still works — trigger it in-session by asking to build/execute/resume a plan, and the session follows `references/ORCHESTRATION.md`. Declining only skips the slash-command shortcut; there is no separate orchestrator agent to invoke.
 
 ---
 

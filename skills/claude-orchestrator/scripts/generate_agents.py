@@ -53,73 +53,6 @@ def _read_template(name: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _build_routing_table(
-    answers: dict[str, Any],
-    project_agents: list[dict[str, Any]],
-) -> str:
-    """Build the routing reference block embedded into plan-orchestrator."""
-    lines = ["## Available agents\n"]
-    lines.append("### Implementation agents (baseline)\n")
-    lines.append("| tier | agent | model |")
-    lines.append("|------|-------|-------|")
-    for tier in answers["tiers"]:
-        label = TIER_MODEL_LABELS.get(tier, tier)
-        lines.append(f"| `{tier}` | `impl-{tier}` | {label} |")
-
-    lines.append(f"\n**Default tier**: `{answers['default_tier']}`\n")
-
-    if project_agents:
-        lines.append("### Project-specific agents (scope-matched)\n")
-        lines.append("| agent | scope_hint | model |")
-        lines.append("|-------|------------|-------|")
-        for pa in project_agents:
-            scope = pa.get("scope_hint", "")
-            model = pa.get("model", "inherit")
-            lines.append(f"| `{pa['name']}` | `{scope}` | {model} |")
-        lines.append("")
-
-    lines.append("### Routing priority\n")
-    lines.append("1. If todo has `agent:` → use that agent directly.")
-    if project_agents:
-        lines.append(
-            "2. If `prefer_project_agents: true` AND a project agent's `scope_hint` "
-            "matches any path in todo's `files:` → use that project agent."
-        )
-        lines.append(
-            "3. Fall back to `impl-<implementation_model>` "
-            "(or `impl-<model_override>` if set on the todo)."
-        )
-    else:
-        lines.append(
-            "2. Fall back to `impl-<implementation_model>` "
-            "(or `impl-<model_override>` if set on the todo)."
-        )
-
-    return "\n".join(lines)
-
-
-def _build_byterover_preflight(byterover_enabled: bool) -> str:
-    """Build the ByteRover pre-flight section for plan-orchestrator."""
-    if not byterover_enabled:
-        return (
-            "**ByteRover**: not enabled. Skip memory pre-flight and "
-            "pending-review surfacing."
-        )
-    return """\
-**ByteRover pre-flight** (run before dispatching the first todo):
-
-```bash
-brv search "<plan topic keywords>" --scope "architecture/" --format json --limit 10
-```
-
-If the search returns relevant prior decisions, surface them inline before
-dispatching. Use at most 1 `brv query` call if search is thin and synthesis
-is genuinely needed.
-
-After ALL todos are done, check for pending taskIds accumulated from sub-agents
-and surface them to the user (see "Report" section)."""
-
-
 def _plan_file_list(
     answers: dict[str, Any],
     project_agents: list[dict[str, Any]],
@@ -133,24 +66,6 @@ def _plan_file_list(
     commands_dir = root / "commands"
 
     byterover_enabled = byterover_info.get("enabled", False)
-
-    # plan-orchestrator
-    orchestrator_tmpl = _read_template("plan-orchestrator.md.tmpl")
-    routing_table = _build_routing_table(answers, project_agents)
-    byterover_preflight = _build_byterover_preflight(byterover_enabled)
-    has_verifier = "yes" if answers["verifier"] else "no"
-    has_memory_curator = "yes" if answers["memory_curator"] else "no"
-    orchestrator_vars = {
-        "default_tier": answers["default_tier"],
-        "agent_routing_table": routing_table,
-        "byterover_preflight": byterover_preflight,
-        "has_verifier": has_verifier,
-        "has_memory_curator": has_memory_curator,
-    }
-    files.append((
-        agents_dir / "plan-orchestrator.md",
-        render_template(orchestrator_tmpl, orchestrator_vars),
-    ))
 
     # impl-* baseline agents
     impl_tmpl = _read_template("impl-baseline.md.tmpl")

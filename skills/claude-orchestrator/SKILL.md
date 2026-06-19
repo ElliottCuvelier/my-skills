@@ -1,6 +1,6 @@
 ---
 name: claude-orchestrator
-description: Plan on Opus/Sonnet and execute on cheaper model-pinned sub-agents via a /claude-orchestrate workflow. Use when the user is in Plan Mode and wants to split planning from implementation to save cost, delegate the build to a cheaper model, orchestrate a plan across multiple sub-agents, assign plan steps to specific models, build this plan on haiku, dispatch to sonnet, use cheaper Claude for implementation, generate project-specific Claude Code sub-agents, install project agents, set up the orchestrator, or mentions sub-agent model selection, cheap build, plan-and-dispatch, or orchestrator pattern. Handles first-use setup (7-question interview + codebase analysis + adaptive roster proposal), generates project-specific sub-agents tailored to the actual codebase using AGENT_PATTERNS.md, detects and integrates ByteRover memory (Recall→Work→Curate→Report loop in every agent), writes an `execution:` block into the plan so `/claude-orchestrate` can dispatch each step to the right sub-agent. Also triggers on /claude-orchestrate, /claude-orchestrate-resume, /update-claude-orchestrator, or when the user asks to install, refresh, or reconfigure the orchestrator.
+description: Plan on Opus/Sonnet and execute on cheaper model-pinned sub-agents via a /claude-orchestrate workflow. Use when the user is in Plan Mode and wants to split planning from implementation to save cost, delegate the build to a cheaper model, orchestrate a plan across multiple sub-agents, assign plan steps to specific models, build this plan on haiku, dispatch to sonnet, use cheaper Claude for implementation, generate project-specific Claude Code sub-agents, install project agents, set up the orchestrator, or mentions sub-agent model selection, cheap build, plan-and-dispatch, or orchestrator pattern. Handles first-use setup (7-question interview + codebase analysis + adaptive roster proposal), generates project-specific sub-agents tailored to the actual codebase using AGENT_PATTERNS.md, detects and integrates ByteRover memory (Recall→Work→Curate→Report loop in every agent), writes an `execution:` block into the plan so `/claude-orchestrate` can dispatch each step to the right sub-agent. Also triggers on /claude-orchestrate, /claude-orchestrate-resume, /update-claude-orchestrator, when the user asks to install, refresh, or reconfigure the orchestrator, or when the user asks to build, execute, orchestrate, or resume a saved plan ("build this plan", "execute this plan", "orchestrate the build", "run this plan on sonnet", "dispatch to haiku", "resume plan").
 ---
 
 # Claude Orchestrator
@@ -24,13 +24,12 @@ Skip when:
 
 ## Overview
 
-The skill coordinates three pieces:
+The skill coordinates two pieces:
 
-1. **You (the planner)** on Opus/Sonnet, drafting a Plan Mode markdown plan.
-2. **`plan-orchestrator`** — a sub-agent (`model: inherit`) that reads a saved plan, parses its `execution:` block, and dispatches each step.
-3. **`impl-<tier>`** sub-agents + project-specific agents — each pinned to a Claude tier (`haiku`, `sonnet`, `opus`, or `inherit`), with project agents scoped to specific directories and patterns in the codebase.
+1. **You — the planner *and* the orchestrator** on Opus/Sonnet. You draft a Plan Mode markdown plan, then *in the same session* you execute it: read the plan, parse its `execution:` block, and dispatch each step. You never edit files yourself while orchestrating — you dispatch sub-agents and write their results back to the plan file.
+2. **`impl-<tier>` sub-agents + project-specific agents + `verifier` + `memory-curator`** — each pinned to a Claude tier (`haiku`, `sonnet`, `opus`, or `inherit`), with project agents scoped to specific directories and patterns in the codebase. These are the only sub-agents, and you dispatch them directly.
 
-The user runs Plan Mode → you draft the plan → first-use sets up the roster → the plan gets saved → the user invokes `/claude-orchestrate <plan-path>` → the orchestrator dispatches each step to the right agent.
+The user runs Plan Mode → you draft the plan → first-use sets up the roster → the plan gets saved → the user invokes `/claude-orchestrate <plan-path>` → **this session** reads the plan and dispatches each step to the right sub-agent. Orchestrating in the same session you planned in keeps all of your planning context available — there is no separate orchestrator agent to hand off to.
 
 ## Workflow
 
@@ -211,16 +210,25 @@ execution:
 ---
 ```
 
-### 9. Execution handoff
+### 9. Execute the plan
 
 Tell the user exactly what to run:
 
 > "Save the plan at `~/.claude/plans/<name>.md`, then run:
 > `/claude-orchestrate ~/.claude/plans/<name>.md`
 >
-> The plan-orchestrator will dispatch each step. You can resume an interrupted run with `/claude-orchestrate-resume ~/.claude/plans/<name>.md`."
+> I'll read the plan and dispatch each step directly from this session — keeping it open preserves all the planning context. Resume an interrupted run with `/claude-orchestrate-resume ~/.claude/plans/<name>.md`, in this session or a fresh one."
 
-You are done. The `plan-orchestrator` sub-agent takes over from there.
+When the user runs the command, orchestrate the plan yourself (see **Executing a plan** below). You are the orchestrator — do not spawn a separate orchestrator agent.
+
+## Executing a plan
+
+When the user runs `/claude-orchestrate` or `/claude-orchestrate-resume`, **or** asks in-session to build, execute, orchestrate, or resume a saved plan, **you (this session) are the orchestrator**:
+
+1. Read the playbook at [references/ORCHESTRATION.md](references/ORCHESTRATION.md) and follow it.
+2. Load the roster from the install marker, read the plan, dispatch each step to the right `impl-*` / project / `verifier` / `memory-curator` sub-agent, update todo statuses in the plan file, and print the final report (including any pending ByteRover review taskIds).
+
+Do **not** spawn a separate orchestrator sub-agent, and do **not** edit files yourself while orchestrating — every code change goes through a dispatched sub-agent. This works even when slash commands weren't installed: the natural-language request alone triggers it.
 
 ## Updating the orchestrator
 
@@ -232,6 +240,7 @@ When the user runs `/update-claude-orchestrator`:
 4. If `byterover.enabled` flipped (e.g., user installed `brv` since first run), offer to regenerate agents with the loop included.
 5. Run `generate_agents.py --regenerate` (SHA-protected — user-edited files are preserved with a warning).
 6. Report: regenerated / skipped (user-edited) / newly registered.
+7. **Upgrade cleanup:** a stale `agents/plan-orchestrator.md` from an older install (before the current session became the orchestrator) is removed automatically on regenerate — or preserved with a warning if you edited it, in which case delete it manually and re-run.
 
 If the user passes `--reconfigure`, re-run the full 7-question interview first.
 
@@ -262,6 +271,7 @@ See [references/TROUBLESHOOTING.md](references/TROUBLESHOOTING.md) for:
 |----------|---------|
 | [references/SETUP.md](references/SETUP.md) | Full Q1–Q7 question wording, options, defaults, and answers payload schema |
 | [references/PLAN_FORMAT.md](references/PLAN_FORMAT.md) | `execution:` block schema, per-todo `agent:` and `model_override:` semantics |
+| [references/ORCHESTRATION.md](references/ORCHESTRATION.md) | The dispatch playbook this session follows when executing a plan |
 | [references/MODEL_TIERS.md](references/MODEL_TIERS.md) | The 4 Claude Code model values and when to use each |
 | [references/AGENT_PATTERNS.md](references/AGENT_PATTERNS.md) | Signal → agent recipe library (the skill's composition intelligence) |
 | [references/BYTEROVER_LOOP.md](references/BYTEROVER_LOOP.md) | Canonical Recall → Work → Curate → Report loop fragment |
