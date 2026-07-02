@@ -1,0 +1,58 @@
+{
+  "skill_name": "event-storming",
+  "evals": [
+    {
+      "id": 0,
+      "name": "autonomous-big-picture",
+      "prompt": "Run an event storming session on this repo so I understand what this product actually does business-wise and where the risky spots are. I can't join right now — just run it and leave your questions for me at the end.",
+      "expected_output": "docs/event-storming/<scope>/ with brief.md (domain brief + 4-6 persona cast incl. a money person), board.md (timeline of past-tense events with provenance tags, pivotal events, people & systems incl. Stripe/Twilio, hot spots incl. the double-booking race and payout confusion), journal.md, outcome.md leading with questions for the absent user; no fabricated user rulings.",
+      "files": [
+        "sample/courtside"
+      ],
+      "assertions": [
+        "Session artifacts all exist: brief.md, board.md, journal.md, outcome.md",
+        "brief.md contains a cast of 4-6 personas, at least one focused on money/finance/payouts",
+        "board.md timeline events are phrased as past-tense facts (>=80% of event lines)",
+        "Stickies carry provenance tags ([code:...], [doc:...], [guess...]) on at least 70% of events",
+        "No fabricated user rulings: no [user] provenance appears anywhere (user was absent)",
+        "Hot spots exist and include the double-booking race AND payout confusion/roll-over opacity",
+        "External systems section includes Stripe and Twilio",
+        "Pivotal events are marked and used to segment the timeline",
+        "outcome.md contains explicit open questions addressed to the user and a concrete recommended next step",
+        "Transcript shows genuine multi-persona disagreement: at least one exchange where two personas conflict and a hot spot is raised from it"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "process-model-cancellation",
+      "prompt": "Let's process-model the cancellation and refund flow end to end — I want a design we could actually implement. Just run it, I'll review after.",
+      "expected_output": "A process-modeling board: full color grammar (commands, systems, events, policies phrased 'Whenever…', read models), the >24h/<24h/venue-cancel policy split interrogated with always/immediately, win conditions checked, open hot spots as questions.",
+      "files": [
+        "sample/courtside"
+      ],
+      "assertions": [
+        "Board contains a complete color-grammar flow: commands, systems, events, policies phrased 'Whenever ...', read models",
+        "The three cancellation branches (>24h credit / <24h nothing / venue-cancel cash) are modeled as distinct policies or paths",
+        "At least one policy is interrogated with always/immediately and refined as a result",
+        "Win conditions explicitly checked at the end (paths complete, grammar holds, hot spots addressed, stakeholders reasonably happy)",
+        "Remaining open questions listed with owners"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "model-storm-maintenance-block",
+      "prompt": "quick model storm: what actually happens when a venue adds a maintenance block that overlaps existing bookings?",
+      "expected_output": "A lightweight evented answer (10-20 events with provenance, e.g. Maintenance Block Added -> overlapping bookings Cancelled By Venue -> CASH refunds issued), open questions as hot spots, no full-ceremony workshop.",
+      "files": [
+        "sample/courtside"
+      ],
+      "assertions": [
+        "Answer traces the causal chain as >=8 past-tense domain events (block added -> overlapping bookings cancelled by venue -> CASH refunds -> notifications)",
+        "Grounded in repo evidence: cites the venue-cancel=CASH-refund rule and/or the auto-cancel test with [code:]/[doc:] tags",
+        "Open questions / hot spots are surfaced (e.g., are players notified, what if slot was paid with credits, payout impact)",
+        "No full-workshop ceremony: no cast-derivation section, no multi-phase Big Picture structure — honors the lightweight mode",
+        "Answer arrives as a direct user-facing reply (answer.md), not buried in board files"
+      ]
+    }
+  ]
+}
