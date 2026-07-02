@@ -7,3 +7,5 @@
 # Python caches (from skill scripts)
 __pycache__/
 *.pyc
+
+.tmp
