@@ -270,6 +270,9 @@ def generate(
             file_hashes=file_hashes,
             report=report,
         )
+        # _install_hooks records its files only in file_hashes; mark them planned
+        # so the stale-file cleanup below doesn't delete them.
+        planned_paths.update(file_hashes.keys())
 
         marker_path = root / "agents" / MARKER_FILENAME
         marker_data = _build_marker(

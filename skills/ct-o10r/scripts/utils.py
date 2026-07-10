@@ -16,7 +16,7 @@ from typing import Any
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 MARKER_FILENAME = ".ct-o10r-installed"
-CURRENT_VERSION = "0.1.0"
+CURRENT_VERSION = "0.1.1"
 
 VALID_TIERS = ("haiku", "sonnet", "opus", "inherit")
 VALID_SCOPES = ("project", "user", "both")
