@@ -310,18 +310,35 @@ def generate(
 
 
 # Maps hook id → list of (template filename, generated script filename, event,
-# matcher|None, timeout ms). One selection can install several team hooks: the
-# "tests" gate needs the TaskCreated sidecar (which records each task's files)
-# alongside the TaskCompleted gate that reads it back.
+# matcher|None, timeout seconds — the unit the settings schema expects). One
+# selection can install several team hooks: the "tests" gate needs the
+# TaskCreated sidecar (which records each task's files) alongside the
+# TaskCompleted gate that reads it back.
 _HOOK_SPEC: dict[str, list[tuple[str, str, str, str | None, int]]] = {
     "tests": [
-        ("hooks/taskcreated-files-sidecar.py.tmpl", "taskcreated-files-sidecar.py", "TaskCreated", None, 5_000),
-        ("hooks/run-task-tests.py.tmpl", "run-task-tests.py", "TaskCompleted", None, 120_000),
+        ("hooks/taskcreated-files-sidecar.py.tmpl", "taskcreated-files-sidecar.py", "TaskCreated", None, 5),
+        ("hooks/run-task-tests.py.tmpl", "run-task-tests.py", "TaskCompleted", None, 120),
     ],
     "taskids": [
-        ("hooks/collect-taskids.py.tmpl", "collect-taskids.py", "TeammateIdle", None, 10_000),
+        ("hooks/collect-taskids.py.tmpl", "collect-taskids.py", "TeammateIdle", None, 10),
     ],
 }
+
+
+def _hook_command(dest: Path, root: Path) -> str:
+    """
+    Build the settings command for one hook script.
+
+    The path is emitted relative to a stable shell variable rather than baked in
+    as an absolute, so the install survives the repo being renamed or moved.
+    $CLAUDE_PROJECT_DIR is only correct for a project-scope root: a user-scope
+    install fires in every project, where it would resolve to whichever repo the
+    session is in and point at a script that isn't there.
+    """
+    rel = dest.relative_to(root.parent).as_posix()
+    if root == Path.home() / ".claude":
+        return f'python3 "$HOME/{rel}"'
+    return f'python3 "$CLAUDE_PROJECT_DIR/{rel}"'
 
 
 def _install_hooks(
@@ -355,7 +372,7 @@ def _install_hooks(
     for hook_id in hooks_to_install:
         if hook_id not in _HOOK_SPEC:
             continue
-        for tmpl_name, script_name, event, matcher, timeout_ms in _HOOK_SPEC[hook_id]:
+        for tmpl_name, script_name, event, matcher, timeout_s in _HOOK_SPEC[hook_id]:
             tmpl_path = skill_root / "templates" / tmpl_name
             if not tmpl_path.is_file():
                 report["errors"].append(f"Missing hook template: {tmpl_path}")
@@ -380,11 +397,11 @@ def _install_hooks(
                 report["written"].append(rel_key)
 
             # --- Part B: build settings entry for this hook ---
-            command = f'python3 "{dest}"'
+            command = _hook_command(dest, root)
             hook_entry: dict[str, Any] = {
                 "type": "command",
                 "command": command,
-                "timeout": timeout_ms,
+                "timeout": timeout_s,
             }
             outer: dict[str, Any] = {"hooks": [hook_entry]}
             if matcher:
