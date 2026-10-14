@@ -1,0 +1,360 @@
+{
+  "catalog_version": 1,
+  "source": "TypeScript Standards & Conventions (typescript-standards.mdc)",
+  "levels": {
+    "must": "error",
+    "should": "warn"
+  },
+  "file_sets": {
+    "ts": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
+    "all": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts", "**/*.js", "**/*.jsx", "**/*.mjs", "**/*.cjs"],
+    "ddd": ["**/domain/**/*.ts", "**/application/**/*.ts", "**/infrastructure/**/*.ts"]
+  },
+  "ignores": [
+    "**/*.d.ts", "**/generated/**", "**/*.gen.ts", "**/__generated__/**", "**/.js-ts-conventions/**",
+    "**/.claude/**", "**/.agents/**", "**/.cursor/**", "**/.codex/**", "**/.opencode/**", "**/.windsurf/**"
+  ],
+  "decorator_metadata_files": [
+    "**/*.controller.ts", "**/*.service.ts", "**/*.module.ts", "**/*.resolver.ts",
+    "**/*.gateway.ts", "**/*.guard.ts", "**/*.interceptor.ts", "**/*.filter.ts",
+    "**/*.pipe.ts", "**/*.strategy.ts", "**/*.handler.ts", "**/*.repository.ts",
+    "**/*.provider.ts", "**/*.listener.ts", "**/*.processor.ts", "**/*.consumer.ts",
+    "**/*.subscriber.ts", "**/*.middleware.ts", "**/*.saga.ts", "**/*.adapter.ts"
+  ],
+  "preferences": [
+    {
+      "id": "strict-compiler",
+      "title": "All strict compiler options on",
+      "level": "must",
+      "section": "Strict type safety",
+      "statement": "Enable `strict` plus the strictness flags it leaves out: `noUncheckedIndexedAccess`, `noImplicitOverride`, `noImplicitReturns`, `noFallthroughCasesInSwitch`.",
+      "why": "The compiler catches whole classes of bugs (unchecked index access, missing returns, implicit any) before review does.",
+      "bad": "{ \"compilerOptions\": { \"strict\": false } }",
+      "good": "{\n  \"compilerOptions\": {\n    \"strict\": true,\n    \"noUncheckedIndexedAccess\": true,\n    \"noImplicitOverride\": true,\n    \"noImplicitReturns\": true,\n    \"noFallthroughCasesInSwitch\": true\n  }\n}",
+      "notes": "`exactOptionalPropertyTypes` is left out on purpose: it rejects the `email: row.email ?? undefined` mapper pattern unless every optional property is typed `T | undefined`. `strict` includes `useUnknownInCatchVariables`, so `catch (error)` gives `unknown`; narrow before reading `.message`.",
+      "files": "ts",
+      "enforce": {
+        "tsconfig": {
+          "strict": true,
+          "noUncheckedIndexedAccess": true,
+          "noImplicitOverride": true,
+          "noImplicitReturns": true,
+          "noFallthroughCasesInSwitch": true
+        }
+      },
+      "autofix": "none"
+    },
+    {
+      "id": "no-any",
+      "title": "No `any`",
+      "level": "must",
+      "section": "Strict type safety",
+      "statement": "Never use `any`. Type values explicitly, or use `unknown` and narrow.",
+      "why": "`any` switches type checking off silently, and the hole spreads to everything the value touches.",
+      "bad": "function process(data: any) {}",
+      "good": "function process(data: User | Product): void {}\n\nfunction parse(input: unknown): User {\n  return UserSchema.parse(input);\n}",
+      "files": "ts",
+      "enforce": {
+        "eslint": {
+          "rules": { "@typescript-eslint/no-explicit-any": [] },
+          "type_aware_rules": {
+            "@typescript-eslint/no-unsafe-assignment": [],
+            "@typescript-eslint/no-unsafe-member-access": [],
+            "@typescript-eslint/no-unsafe-call": [],
+            "@typescript-eslint/no-unsafe-return": [],
+            "@typescript-eslint/no-unsafe-argument": []
+          }
+        },
+        "oxlint": {
+          "rules": { "typescript/no-explicit-any": [] },
+          "type_aware_rules": {
+            "typescript/no-unsafe-assignment": [],
+            "typescript/no-unsafe-member-access": [],
+            "typescript/no-unsafe-call": [],
+            "typescript/no-unsafe-return": [],
+            "typescript/no-unsafe-argument": []
+          }
+        }
+      },
+      "autofix": "none",
+      "heuristic": "(?::\\s*any\\b|\\bas\\s+any\\b|<any>)"
+    },
+    {
+      "id": "no-null",
+      "title": "No `null`: `undefined` only",
+      "level": "must",
+      "section": "Strict type safety",
+      "statement": "Never use `null` in application code; `undefined` is the only absence value. Convert `null` to `undefined` at every boundary (API responses, database rows) with `value ?? undefined`, usually in a mapper.",
+      "why": "One absence value means one check (`?.`, `??`, `=== undefined`), and optional properties (`x?: T`) already mean `undefined`.",
+      "bad": "const value: string | null = null;",
+      "good": "const value: string | undefined = undefined;\n\n// Database mapper: the boundary converts\npublic static toDomain(row: ContactRow): Contact {\n  return Contact.create({\n    email: row.email ?? undefined,\n    phone: row.phone ?? undefined,\n  });\n}",
+      "notes": "Still allowed where a platform API demands it: `Object.create(null)`, `useRef(null)`, `JSON.stringify(x, null, 2)`, `insertBefore(node, null)`, `setPrototypeOf(x, null)`. React 18+ components can `return undefined`. Boundary code that must read or write `null` (ORM entities, raw API types) gets a path exemption in `.js-ts-conventions/overrides.json`.",
+      "files": "all",
+      "boundary_hints": ["**/infrastructure/**", "**/*.orm-entity.ts", "**/*.entity.orm.ts", "**/prisma/**", "**/migrations/**"],
+      "enforce": {
+        "eslint": { "rules": { "js-ts-conventions/no-null": [] } },
+        "oxlint": { "rules": { "js-ts-conventions/no-null": [] } }
+      },
+      "autofix": "none",
+      "heuristic": "\\bnull\\b"
+    },
+    {
+      "id": "explicit-types",
+      "title": "Explicit types at module boundaries",
+      "level": "should",
+      "section": "Strict type safety",
+      "statement": "Exported functions and public methods declare their parameter and return types.",
+      "why": "From \"explicitly type everything\": the signature is the contract, so inference must not change it silently.",
+      "bad": "export function getDomain(email) {\n  return email.split('@')[1] ?? '';\n}",
+      "good": "export function getDomain(email: string): string {\n  return email.split('@')[1] ?? '';\n}",
+      "files": "ts",
+      "enforce": {
+        "eslint": { "rules": { "@typescript-eslint/explicit-module-boundary-types": [] } },
+        "oxlint": { "rules": { "typescript/explicit-module-boundary-types": [] } }
+      },
+      "autofix": "none"
+    },
+    {
+      "id": "naming",
+      "title": "Naming conventions",
+      "level": "must",
+      "section": "Naming conventions",
+      "statement": "PascalCase for classes, interfaces, types, enums and type parameters. SCREAMING_SNAKE_CASE for enum members. camelCase for functions, methods, properties, parameters and variables (PascalCase is fine for React components, and for schema or class values such as `CreateRequestDtoSchema`).",
+      "why": "The case of a name tells the reader what kind of thing it is before they look it up.",
+      "bad": "enum request_status { meetingPlanned = 'MEETING_PLANNED' }\nconst user_id = '123';\nfunction Create_request() {}",
+      "good": "export enum RequestStatus {\n  NEW = 'NEW',\n  MEETING_PLANNED = 'MEETING_PLANNED',\n}\nexport class RequestEntity {}\nexport interface RequestProps {}\nexport type RequestId = string;\nconst userId = '123';\nfunction createRequest(): void {}",
+      "notes": "Shorthand destructuring (`const { first_name } = row`), object keys and imports mirror external shapes and are not checked.",
+      "files": "all",
+      "enforce": {
+        "eslint": { "rules": { "js-ts-conventions/naming": [] } },
+        "oxlint": { "rules": { "js-ts-conventions/naming": [] } }
+      },
+      "autofix": "none"
+    },
+    {
+      "id": "constant-case",
+      "title": "SCREAMING_SNAKE_CASE constants",
+      "level": "should",
+      "section": "Naming conventions",
+      "statement": "Module-level constants holding a primitive literal are SCREAMING_SNAKE_CASE.",
+      "why": "Constants read as configuration at a glance, separate from values computed at runtime.",
+      "bad": "const maxRetryAttempts = 3;\nconst apiBaseUrl = 'https://api.example.com';",
+      "good": "const MAX_RETRY_ATTEMPTS = 3;\nconst API_BASE_URL = 'https://api.example.com';",
+      "notes": "Framework-mandated exports keep their names (`dynamic`, `revalidate`, `runtime`, `prerender`, ...). Add more via `options.constant-case.allow` in overrides.",
+      "files": "all",
+      "enforce": {
+        "eslint": { "rules": { "js-ts-conventions/constant-case": [] } },
+        "oxlint": { "rules": { "js-ts-conventions/constant-case": [] } }
+      },
+      "autofix": "none"
+    },
+    {
+      "id": "filename-case",
+      "title": "kebab-case filenames",
+      "level": "must",
+      "section": "Naming conventions",
+      "statement": "Filenames are kebab-case, with dot-separated role suffixes: `request.entity.ts`, `create-request.command.ts`, `request-status.value-object.ts`.",
+      "why": "One casing works on every filesystem and makes the role of a file greppable.",
+      "bad": "RequestStatus.ts\ncreate_request.command.ts\nButton.stories.tsx",
+      "good": "request-status.value-object.ts\ncreate-request.command.ts\nbutton.stories.tsx",
+      "notes": "Route-segment names stay legal: `[id].tsx`, `[[...slug]].tsx`, `_app.tsx`, `$id.tsx`, `+page.ts`.",
+      "files": "all",
+      "enforce": {
+        "eslint": { "rules": { "js-ts-conventions/filename-case": [] } },
+        "oxlint": { "rules": { "js-ts-conventions/filename-case": [] } }
+      },
+      "autofix": "none"
+    },
+    {
+      "id": "no-getters",
+      "title": "Explicit methods, not getters",
+      "level": "must",
+      "section": "Value objects",
+      "statement": "Expose state through explicit methods (`getFirstName()`, `isValid()`), never class `get` accessors.",
+      "why": "A method call says work may happen; a getter disguises computation as a field read.",
+      "bad": "export class PersonName extends ValueObject<PersonNameProps> {\n  public get fullName(): string {\n    return `${this.props.firstName} ${this.props.lastName}`;\n  }\n}",
+      "good": "export class PersonName extends ValueObject<PersonNameProps> {\n  public getFullName(): string {\n    return `${this.props.firstName} ${this.props.lastName}`;\n  }\n}",
+      "files": "all",
+      "enforce": {
+        "eslint": { "rules": { "js-ts-conventions/no-getters": [] } },
+        "oxlint": { "rules": { "js-ts-conventions/no-getters": [] } }
+      },
+      "autofix": "none",
+      "heuristic": "^\\s*(?:(?:public|protected|private|static|override|abstract)\\s+)*get\\s+[A-Za-z_$#][\\w$]*\\s*\\("
+    },
+    {
+      "id": "value-object-structure",
+      "title": "Value object structure",
+      "level": "should",
+      "section": "Value objects",
+      "scope": "ddd",
+      "statement": "Value objects have a private constructor, validate in a protected `validate()`, are created through a static `create()` that returns a `Result`, and expose values through explicit methods (`getValue()`).",
+      "why": "Construction always goes through validation, and callers handle failure as a value instead of a surprise throw.",
+      "bad": "export class Email {\n  constructor(public value: string) {}\n}",
+      "good": "export class Email extends ValueObject<EmailProps> {\n  private constructor(props: EmailProps) {\n    super(props);\n  }\n\n  protected validate(props: EmailProps): void {\n    if (!isValidEmail(props.value)) {\n      throw new ArgumentInvalidException('Invalid email format');\n    }\n  }\n\n  public static create(value: string): Result<Email, string> {\n    try {\n      return Result.ok(new Email({ value: value.trim().toLowerCase() }));\n    } catch (error) {\n      return Result.err(error instanceof Error ? error.message : String(error));\n    }\n  }\n\n  public getValue(): string {\n    return this.props.value;\n  }\n}",
+      "review": "Sample up to 10 classes extending `ValueObject` (or living in `value-objects/`). Check: private constructor, protected `validate()`, static `create()` returning `Result`, explicit getter methods, readonly props.",
+      "files": "ts",
+      "enforce": {},
+      "autofix": "none"
+    },
+    {
+      "id": "result-type",
+      "title": "`Result` for fallible operations",
+      "level": "must",
+      "section": "Result type",
+      "scope": "ddd",
+      "statement": "Factories and repository methods that can fail return the repo's `Result<T, E>` instead of throwing. Callers check `isErr()` before `getValue()`.",
+      "why": "Failure becomes part of the signature, so the compiler makes every caller handle it.",
+      "bad": "async findById(id: string): Promise<Entity> {\n  const row = await this.prisma.entity.findUnique({ where: { id } });\n  if (!row) throw new Error('not found');\n  return this.mapper.toDomain(row);\n}",
+      "good": "async findById(id: string): Promise<Result<Entity, string>> {\n  try {\n    const row = await this.prisma.entity.findUnique({ where: { id } });\n    if (!row) {\n      return Result.err('Entity not found');\n    }\n    return Result.ok(this.mapper.toDomain(row));\n  } catch (error) {\n    return Result.err(`Database error: ${error instanceof Error ? error.message : String(error)}`);\n  }\n}",
+      "review": "Find the repo's Result type (grep `Result.ok(`). Sample up to 10 static `create()` factories and repository `find*`/`save*` methods: fallible ones return `Result`. Never introduce a second Result library.",
+      "files": "ts",
+      "enforce": {},
+      "autofix": "none"
+    },
+    {
+      "id": "zod-at-boundaries",
+      "title": "Zod validation at every boundary",
+      "level": "must",
+      "section": "Data validation",
+      "statement": "Validate all external input (request DTOs, webhook payloads, third-party API responses, env) with a Zod schema, and derive the TypeScript type with `z.infer`; never hand-write a parallel interface.",
+      "why": "Types describe what you hope arrives; schemas check what actually arrived.",
+      "bad": "export interface CreateRequestDto {\n  dealId: string;\n  email: string;\n}",
+      "good": "export const CreateRequestDtoSchema = z.object({\n  dealId: z.string().uuid('Deal ID must be a valid UUID'),\n  email: z.string().email().toLowerCase(),\n  phone: z.string().regex(/^\\+[1-9]\\d{1,14}$/).optional(),\n  scheduledAt: z.string().datetime(),\n});\n\nexport type CreateRequestDto = z.infer<typeof CreateRequestDtoSchema>;",
+      "review": "List entry points (controllers, route handlers, server actions, webhook handlers, API clients). Sample up to 10: each parses input through a Zod schema before use, and DTO types come from `z.infer`.",
+      "files": "ts",
+      "enforce": {},
+      "autofix": "none"
+    },
+    {
+      "id": "iso-standards",
+      "title": "ISO standards for international data",
+      "level": "must",
+      "section": "ISO standards",
+      "statement": "Dates and times are ISO 8601 strings (`toISOString()`, `z.string().datetime()`). Phone numbers are E.164 (`+32470123456`). Countries are ISO 3166-1 alpha-2 (`BE`). Languages are ISO 639-1 (`fr`), and locales combine them (`fr-BE`).",
+      "why": "One canonical format per kind of data removes parsing ambiguity between services, databases and locales.",
+      "bad": "const createdAt = new Date().toLocaleDateString();\nconst phone = '0470 12 34 56';\nconst country = 'Belgium';",
+      "good": "const createdAt = new Date().toISOString();\nconst phone = '+32470123456';\nconst country = 'BE';\nconst locale = 'fr-BE';",
+      "review": "Grep schemas and DTOs for date, phone, country, language and locale fields. Check their validators: `.datetime()`, an E.164 regex, ISO code enums. Flag `toLocaleDateString()` or custom date formats in stored or transmitted data.",
+      "files": "ts",
+      "enforce": {},
+      "autofix": "none"
+    },
+    {
+      "id": "readonly-props",
+      "title": "Readonly properties",
+      "level": "should",
+      "section": "Immutability",
+      "statement": "Mark properties `readonly`: interface and type members, class fields and constructor parameter properties. Leave a class field mutable only when the class reassigns it.",
+      "why": "Immutable data can be shared and reasoned about without defensive copies.",
+      "bad": "export interface RequestProps {\n  id: string;\n  status: RequestStatus;\n}",
+      "good": "export interface RequestProps {\n  readonly id: string;\n  readonly status: RequestStatus;\n}\n\nexport class Command {\n  readonly id: string;\n\n  constructor(props: CommandProps) {\n    this.id = props.id;\n  }\n}",
+      "files": "ts",
+      "enforce": {
+        "eslint": { "rules": { "js-ts-conventions/readonly-props": [] } },
+        "oxlint": { "rules": { "js-ts-conventions/readonly-props": [] } }
+      },
+      "autofix": "none"
+    },
+    {
+      "id": "as-const-constants",
+      "title": "`as const` for constant collections",
+      "level": "should",
+      "section": "Immutability",
+      "statement": "SCREAMING_SNAKE_CASE array and object constants end with `as const`.",
+      "why": "The value becomes deeply read-only and keeps its literal types, so `(typeof REQUEST_TYPES)[number]` is a precise union.",
+      "bad": "const REQUEST_TYPES = ['INITIAL_VISIT', 'FOLLOW_UP'];",
+      "good": "const REQUEST_TYPES = ['INITIAL_VISIT', 'FOLLOW_UP'] as const;",
+      "files": "ts",
+      "enforce": {
+        "eslint": { "rules": { "js-ts-conventions/prefer-as-const-constants": [] } },
+        "oxlint": { "rules": { "js-ts-conventions/prefer-as-const-constants": [] } }
+      },
+      "autofix": "none"
+    },
+    {
+      "id": "typed-exceptions",
+      "title": "Typed exceptions",
+      "level": "must",
+      "section": "Error handling",
+      "scope": "ddd",
+      "statement": "Domain, application and infrastructure code throws typed exceptions (`ArgumentInvalidException`, `EntityNotFoundException`, `ConflictException`, ...), never a bare `Error`. A global exception filter maps them to HTTP status codes.",
+      "why": "The exception type carries the meaning, and the filter turns it into the right status code (400, 404, 409) in one place.",
+      "bad": "throw new Error('Email cannot be empty');",
+      "good": "throw new ArgumentInvalidException('Email cannot be empty');\nthrow new EntityNotFoundException('Contact not found');",
+      "review": "Check that one global filter maps domain exceptions to HTTP codes (NestJS: `@Catch(DomainException, HttpException)`).",
+      "files": "ddd",
+      "enforce": {
+        "eslint": { "rules": { "js-ts-conventions/no-generic-error": [] } },
+        "oxlint": { "rules": { "js-ts-conventions/no-generic-error": [] } }
+      },
+      "autofix": "none",
+      "heuristic": "throw\\s+(?:new\\s+)?Error\\("
+    },
+    {
+      "id": "alias-imports",
+      "title": "`@/` alias for cross-module imports",
+      "level": "must",
+      "section": "Imports",
+      "requires": "path_alias",
+      "statement": "Import across modules through the `@/` path alias. Relative paths are for the same folder or one level up only.",
+      "why": "Alias paths survive file moves and show where a dependency lives.",
+      "bad": "import { Command } from '../../../libs/ddd/command.base';",
+      "good": "import { Command } from '@/libs/ddd/command.base';\nimport { RequestEntity } from '@/modules/sales/request/domain/request.entity';",
+      "notes": "Enforced only where a tsconfig defines an `@/*` path alias. Without one, adding the alias is a config step in the fix plan. Tooling configs (`*.config.*`) are exempt.",
+      "files": "all",
+      "ignores": ["**/*.config.js", "**/*.config.mjs", "**/*.config.cjs", "**/*.config.ts", "**/*.config.mts", "**/*.config.cts"],
+      "enforce": {
+        "eslint": { "rules": { "js-ts-conventions/no-deep-relative-imports": [{ "maxParentDepth": 1, "alias": "@/" }] } },
+        "oxlint": { "rules": { "js-ts-conventions/no-deep-relative-imports": [{ "maxParentDepth": 1, "alias": "@/" }] } }
+      },
+      "autofix": "none",
+      "heuristic": "from\\s+['\"](?:\\./)?\\.\\./\\.\\./"
+    },
+    {
+      "id": "type-imports",
+      "title": "`import type` for type-only imports",
+      "level": "must",
+      "section": "Imports",
+      "statement": "Use a separate `import type` for anything used only as a type; use regular imports for classes and values.",
+      "why": "Type-only imports are erased predictably, which avoids accidental runtime cycles and side-effect imports.",
+      "bad": "import { CreateRequestDto } from './create-request.request.dto';",
+      "good": "import type { CreateRequestDto } from './create-request.request.dto';\nimport { CreateRequestCommand } from './create-request.command';",
+      "notes": "NestJS with `emitDecoratorMetadata`: constructor-injected classes must stay value imports. ESLint skips decorated files when the decorator parser options are set (this skill sets them). oxlint has no such check, so DI-role files (`*.controller.ts`, `*.service.ts`, ...) are exempt there.",
+      "files": "ts",
+      "enforce": {
+        "eslint": { "rules": { "@typescript-eslint/consistent-type-imports": [{ "prefer": "type-imports", "fixStyle": "separate-type-imports" }] } },
+        "oxlint": { "rules": { "typescript/consistent-type-imports": [{ "prefer": "type-imports", "fixStyle": "separate-type-imports" }] } }
+      },
+      "autofix": "full"
+    },
+    {
+      "id": "jsdoc-public-api",
+      "title": "JSDoc on public APIs",
+      "level": "should",
+      "section": "Documentation",
+      "statement": "Exported functions, classes and public methods carry a JSDoc block: purpose, `@param`, `@returns`, and `@throws` (or \"never throws, returns Result\").",
+      "why": "The contract shows in editor hovers without opening the implementation.",
+      "bad": "public static create(props: RequestProps): Result<Request, string> {}",
+      "good": "/**\n * Creates a new visit request.\n *\n * @param props - Request properties including dealId, contactId and type\n * @returns Result containing the created Request or an error message\n * @throws Never throws - returns Result instead\n */\npublic static create(props: RequestProps): Result<Request, string> {}",
+      "review": "Sample up to 10 exported functions or classes in domain and application code; report the share with a JSDoc block.",
+      "files": "ts",
+      "enforce": {},
+      "autofix": "none"
+    },
+    {
+      "id": "comments-why",
+      "title": "Comments explain why, not what",
+      "level": "should",
+      "section": "Documentation",
+      "statement": "Inline comments explain intent, constraints or trade-offs. Code that needs a \"what\" comment gets clearer names instead.",
+      "why": "\"What\" comments repeat the code and rot; \"why\" comments carry knowledge the code cannot.",
+      "bad": "// Multiply attempt by attempt by 1000\nawait this.delay(attempt * attempt * 1000);",
+      "good": "// Exponential backoff so we don't overwhelm the API during outages\nawait this.delay(attempt * attempt * 1000);",
+      "review": "Skim the comments in 5 recently changed files and note any that restate the code.",
+      "files": "all",
+      "enforce": {},
+      "autofix": "none"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+# .js-ts-conventions
+
+The JS/TS conventions for this repo, managed by the `js-ts-conventions` agent skill
+(skill __VERSION__, catalog v__CATALOG__). Ask your agent to run `/js-ts-conventions` to re-audit or update.
+
+| File | Edit? | Purpose |
+|---|---|---|
+| `overrides.json` | yes | Per-repo opt-outs (with a reason), severity changes, path exemptions, rule options |
+| `plugin.mjs` | no | Custom lint rules shared by ESLint and oxlint |
+| `eslint.mjs` | no | `withConventions()` wrapper your `eslint.config.*` calls |
+| `oxlint*.json` | no | Config your `.oxlintrc.json` extends |
+| `legacy.json` | no | oxlint files frozen by the ratchet (existing violations) |
+| `manifest.json` | no | Hashes of generated files; edited files are never overwritten |
+| `REPORT.md`, `PLAN.md`, `audit.json` | optional | Latest audit and fix plan |
+
+Generated files are rewritten on every enforce run. Change behaviour through `overrides.json`:
+
+```json
+{
+  "disabled": { "readonly-props": "React props interfaces, revisit after the v2 migration" },
+  "severity": { "explicit-types": "off" },
+  "exempt": { "no-null": ["src/**/infrastructure/**"] },
+  "options": { "alias-imports": { "max_parent_depth": 2 }, "constant-case": { "allow": ["config"] } },
+  "scope": { "typed-exceptions": true }
+}
+```
+
+Globs in `exempt` are relative to the repo root.
